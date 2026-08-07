@@ -1,2 +1,2 @@
-# TP1-Simulaci-nDeSistemas-72.25
+# TP1-SimulacinDeSistemas-72.25
 Cell Index Method 
