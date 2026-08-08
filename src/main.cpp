@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <argparse/argparse.hpp>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "generator.hpp"
+#include "neighbors.hpp"
 #include "particle.hpp"
 
 namespace {
@@ -43,6 +45,18 @@ void write_dynamic(const std::string& path, const std::vector<Particle>& particl
     }
 }
 
+// Neighbour file: one line per particle, "id: id id ...".
+void write_neighbors(const std::string& path, const NeighborLists& neighbors) {
+    ensure_parent_dir(path);
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("cannot write " + path);
+    for (std::size_t i = 0; i < neighbors.size(); ++i) {
+        out << i << ':';
+        for (int j : neighbors[i]) out << ' ' << j;
+        out << '\n';
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -55,8 +69,12 @@ int main(int argc, char* argv[]) {
     program.add_argument("--seed").help("RNG seed").default_value(std::string("42"));
     program.add_argument("--attempts").help("rejection budget per particle").default_value(20000).scan<'i', int>();
     program.add_argument("--periodic").help("use periodic boundary conditions").flag();
+    program.add_argument("--rc").help("interaction radius").default_value(1.0).scan<'g', double>();
+    program.add_argument("--method").help("neighbour search: brute | none")
+        .default_value(std::string("brute"));
     program.add_argument("--static-out").help("static output file").default_value(std::string("data/static.txt"));
     program.add_argument("--dynamic-out").help("dynamic output file").default_value(std::string("data/dynamic.txt"));
+    program.add_argument("--neighbors-out").help("neighbour list output file").default_value(std::string("data/neighbors.txt"));
     program.add_argument("--verify").help("run the O(N^2) overlap check on the result").flag();
 
     try {
@@ -96,6 +114,35 @@ int main(int argc, char* argv[]) {
                   << " | grid " << stats.grid_side << "x" << stats.grid_side
                   << " | attempts/particle " << static_cast<double>(stats.attempts) / std::max(cfg.N, 1)
                   << " | packing fraction " << stats.packing_fraction << '\n';
+
+        const std::string method = program.get<std::string>("--method");
+        const double rc = program.get<double>("--rc");
+        if (method == "none") return 0;
+        if (method != "brute") {
+            std::cerr << "error: unknown --method '" << method << "' (brute | none)\n";
+            return 1;
+        }
+        if (rc < 0.0) {
+            std::cerr << "error: rc must be non-negative\n";
+            return 1;
+        }
+
+        // Only the search is timed: neither the generation above nor the file
+        // written below belongs in the measurement.
+        const auto t0 = std::chrono::steady_clock::now();
+        const NeighborLists neighbors = brute_force_neighbors(particles, cfg.L, rc, cfg.periodic);
+        const double seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - t0).count();
+
+        std::size_t pairs = 0;
+        for (const std::vector<int>& list : neighbors) pairs += list.size();
+
+        write_neighbors(program.get<std::string>("--neighbors-out"), neighbors);
+
+        std::cerr << "brute force: rc=" << rc << " | " << seconds << " s | "
+                  << pairs / 2 << " pairs | "
+                  << static_cast<double>(pairs) / std::max<std::size_t>(neighbors.size(), 1)
+                  << " neighbours/particle\n";
     } catch (const std::exception& err) {
         std::cerr << "error: " << err.what() << '\n';
         return 1;

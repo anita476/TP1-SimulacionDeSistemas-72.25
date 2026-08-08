@@ -69,10 +69,22 @@ grilla usada, los intentos por partícula y la fracción de empaquetamiento.
 | `-L` | lado del área | 20 |
 | `--rmin` / `--rmax` | rango de radios | 0.23 / 0.26 |
 | `--periodic` | condiciones periódicas de contorno | paredes |
+| `--rc` | radio de interacción | 1.0 |
+| `--method` | búsqueda de vecinas: `brute` o `none` | `brute` |
 | `--seed` | semilla del generador | 42 |
 | `--attempts` | intentos por partícula antes de fallar | 20000 |
 | `--verify` | chequeo O(N²) de que no hay solapamientos | off |
-| `--static-out` / `--dynamic-out` | archivos de salida | `data/…` |
+| `--static-out` / `--dynamic-out` / `--neighbors-out` | archivos de salida | `data/…` |
+
+`--method none` genera las partículas y no busca vecinas: sirve para medir sólo la
+generación, y es obligatorio si `N` es grande, porque la fuerza bruta es O(N²).
+
+El archivo de vecinas tiene una línea por partícula:
+
+```
+0: 83 159 316 318
+1: 10 15 45 131 271 301 370
+```
 
 Códigos de salida: `0` ok, `1` error de parámetros o densidad inalcanzable,
 `2` la verificación encontró un solapamiento.
@@ -96,8 +108,9 @@ vecinas numeradas desde 1 en lugar de desde 0.
 |---|---|
 | 1 — generación aleatoria no superpuesta | listo |
 | 1 — figura de partículas y vecinas | listo |
-| 1 — fuerza bruta | pendiente |
+| 1 — fuerza bruta | listo |
+| 1 — salida de lista de vecinas y tiempo | listo |
 | 1 — Cell Index Method (paredes y periódico) | pendiente |
-| 1 — salida de lista de vecinas y tiempo | pendiente |
+| 1 — error si `M > L/(rc + 2·r_max)` | pendiente |
 | 3 — tiempo en función de M | pendiente |
 | 4 — tiempo en función de N | pendiente |
