@@ -68,9 +68,11 @@ grilla usada, los intentos por partícula y la fracción de empaquetamiento.
 | `-N` | cantidad de partículas | 1000 |
 | `-L` | lado del área | 20 |
 | `--rmin` / `--rmax` | rango de radios | 0.23 / 0.26 |
+| `-M` | celdas por lado; `0` usa el máximo permitido | 0 |
 | `--periodic` | condiciones periódicas de contorno | paredes |
 | `--rc` | radio de interacción | 1.0 |
 | `--method` | búsqueda de vecinas: `brute` o `none` | `brute` |
+| `--input-static` / `--input-dynamic` | leer la configuración en vez de generarla | — |
 | `--seed` | semilla del generador | 42 |
 | `--attempts` | intentos por partícula antes de fallar | 20000 |
 | `--verify` | chequeo O(N²) de que no hay solapamientos | off |
@@ -85,6 +87,31 @@ El archivo de vecinas tiene una línea por partícula:
 0: 83 159 316 318
 1: 10 15 45 131 271 301 370
 ```
+
+## Usar una configuración existente
+
+En vez de generar, el programa puede leer las posiciones y los radios de disco,
+que es como el enunciado plantea el input del CIM. `N` y `L` salen de los
+archivos, así que `-N` y `-L` se ignoran.
+
+```bash
+./build/CIM-TP1 --input-static data/static.txt --input-dynamic data/dynamic.txt --rc 1.0 -M 13
+```
+
+## Tamaño de la grilla
+
+El criterio `L/M > rc` del apunte vale para partículas puntuales. Como acá las
+partículas tienen radio y se archivan en la celda de su **centro**, el alcance
+efectivo entre centros es `rc + r_i + r_j`, de modo que:
+
+```
+L/M >= rc + 2·r_max     =>     M <= L / (rc + 2·r_max)
+```
+
+Con `L=20`, `rc=1` y `r_max=0.26` da **M ≤ 13**. Pasarse de ahí pierde en
+silencio los pares cuyos centros quedan a dos celdas pero cuyos bordes siguen
+dentro de `rc`, así que el programa lo rechaza con un error. `r_max` se toma de
+las partículas reales, no del parámetro `--rmax`.
 
 Códigos de salida: `0` ok, `1` error de parámetros o densidad inalcanzable,
 `2` la verificación encontró un solapamiento.
@@ -110,7 +137,8 @@ vecinas numeradas desde 1 en lugar de desde 0.
 | 1 — figura de partículas y vecinas | listo |
 | 1 — fuerza bruta | listo |
 | 1 — salida de lista de vecinas y tiempo | listo |
+| 1 — leer estático/dinámico como input | listo |
+| 1 — error si `M > L/(rc + 2·r_max)` | listo |
 | 1 — Cell Index Method (paredes y periódico) | pendiente |
-| 1 — error si `M > L/(rc + 2·r_max)` | pendiente |
 | 3 — tiempo en función de M | pendiente |
 | 4 — tiempo en función de N | pendiente |

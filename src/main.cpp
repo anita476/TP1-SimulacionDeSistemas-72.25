@@ -3,79 +3,35 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "generator.hpp"
+#include "io.hpp"
 #include "neighbors.hpp"
 #include "particle.hpp"
-
-namespace {
-
-// Creates the output folder if the caller asked for one that does not exist yet.
-void ensure_parent_dir(const std::string& path) {
-    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
-    if (!parent.empty()) std::filesystem::create_directories(parent);
-}
-
-// Static file: N, L and then one "radius property" line per particle.
-void write_static(const std::string& path, const std::vector<Particle>& particles, double L) {
-    ensure_parent_dir(path);
-    std::ofstream out(path);
-    if (!out) throw std::runtime_error("cannot write " + path);
-    out << particles.size() << '\n' << std::setprecision(12) << L << '\n';
-    for (const Particle& p : particles) {
-        out << p.r << " 1\n";
-    }
-}
-
-// Dynamic file: a single time t0 followed by "x y vx vy" per particle.
-void write_dynamic(const std::string& path, const std::vector<Particle>& particles) {
-    ensure_parent_dir(path);
-    std::ofstream out(path);
-    if (!out) throw std::runtime_error("cannot write " + path);
-    out << "0\n" << std::setprecision(12);
-    for (const Particle& p : particles) {
-        out << p.x << ' ' << p.y << " 0 0\n";
-    }
-}
-
-// Neighbour file: one line per particle, "id: id id ...".
-void write_neighbors(const std::string& path, const NeighborLists& neighbors) {
-    ensure_parent_dir(path);
-    std::ofstream out(path);
-    if (!out) throw std::runtime_error("cannot write " + path);
-    for (std::size_t i = 0; i < neighbors.size(); ++i) {
-        out << i << ':';
-        for (int j : neighbors[i]) out << ' ' << j;
-        out << '\n';
-    }
-}
-
-}  // namespace
 
 int main(int argc, char* argv[]) {
     argparse::ArgumentParser program("CIM-TP1");
 
     program.add_argument("-N").help("number of particles").default_value(1000).scan<'i', int>();
     program.add_argument("-L").help("side of the square domain").default_value(20.0).scan<'g', double>();
+    program.add_argument("-M").help("cells per side; 0 uses the maximum allowed").default_value(0).scan<'i', int>();
     program.add_argument("--rmin").help("minimum particle radius").default_value(0.23).scan<'g', double>();
     program.add_argument("--rmax").help("maximum particle radius").default_value(0.26).scan<'g', double>();
+    program.add_argument("--rc").help("interaction radius").default_value(1.0).scan<'g', double>();
+    program.add_argument("--method").help("neighbour search: brute | none").default_value(std::string("brute"));
+    program.add_argument("--periodic").help("use periodic boundary conditions").flag();
     program.add_argument("--seed").help("RNG seed").default_value(std::string("42"));
     program.add_argument("--attempts").help("rejection budget per particle").default_value(20000).scan<'i', int>();
-    program.add_argument("--periodic").help("use periodic boundary conditions").flag();
-    program.add_argument("--rc").help("interaction radius").default_value(1.0).scan<'g', double>();
-    program.add_argument("--method").help("neighbour search: brute | none")
-        .default_value(std::string("brute"));
+    program.add_argument("--verify").help("run the O(N^2) overlap check on the configuration").flag();
+    program.add_argument("--input-static").help("read the configuration instead of generating it").default_value(std::string(""));
+    program.add_argument("--input-dynamic").help("positions that go with --input-static").default_value(std::string(""));
     program.add_argument("--static-out").help("static output file").default_value(std::string("data/static.txt"));
     program.add_argument("--dynamic-out").help("dynamic output file").default_value(std::string("data/dynamic.txt"));
     program.add_argument("--neighbors-out").help("neighbour list output file").default_value(std::string("data/neighbors.txt"));
-    program.add_argument("--verify").help("run the O(N^2) overlap check on the result").flag();
 
     try {
         program.parse_args(argc, argv);
@@ -84,22 +40,55 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    GeneratorConfig cfg;
-    cfg.N = program.get<int>("-N");
-    cfg.L = program.get<double>("-L");
-    cfg.r_min = program.get<double>("--rmin");
-    cfg.r_max = program.get<double>("--rmax");
-    cfg.max_attempts = program.get<int>("--attempts");
-    cfg.periodic = program.get<bool>("--periodic");
-
     try {
-        cfg.seed = std::stoull(program.get<std::string>("--seed"));
+        const bool periodic = program.get<bool>("--periodic");
+        const double rc = program.get<double>("--rc");
+        const std::string in_static = program.get<std::string>("--input-static");
+        const std::string in_dynamic = program.get<std::string>("--input-dynamic");
 
-        GeneratorStats stats;
-        const std::vector<Particle> particles = generate_particles(cfg, &stats);
+        if (rc < 0.0) {
+            std::cerr << "error: rc must be non-negative\n";
+            return 1;
+        }
+        if (in_static.empty() != in_dynamic.empty()) {
+            std::cerr << "error: --input-static and --input-dynamic go together\n";
+            return 1;
+        }
+
+        std::vector<Particle> particles;
+        double L = 0.0;
+
+        if (!in_static.empty()) {
+            const Configuration config = read_configuration(in_static, in_dynamic);
+            particles = config.particles;
+            L = config.L;
+            std::cerr << "read " << particles.size() << " particles from " << in_static
+                      << " and " << in_dynamic << " | L=" << L << '\n';
+        } else {
+            GeneratorConfig cfg;
+            cfg.N = program.get<int>("-N");
+            cfg.L = program.get<double>("-L");
+            cfg.r_min = program.get<double>("--rmin");
+            cfg.r_max = program.get<double>("--rmax");
+            cfg.max_attempts = program.get<int>("--attempts");
+            cfg.periodic = periodic;
+            cfg.seed = std::stoull(program.get<std::string>("--seed"));
+
+            GeneratorStats stats;
+            particles = generate_particles(cfg, &stats);
+            L = cfg.L;
+
+            write_static(program.get<std::string>("--static-out"), particles, L);
+            write_dynamic(program.get<std::string>("--dynamic-out"), particles);
+
+            std::cerr << "generated " << particles.size() << " particles in " << stats.seconds << " s"
+                      << " | placement grid " << stats.grid_side << "x" << stats.grid_side
+                      << " | attempts/particle " << static_cast<double>(stats.attempts) / std::max(cfg.N, 1)
+                      << " | packing fraction " << stats.packing_fraction << '\n';
+        }
 
         if (program.get<bool>("--verify")) {
-            const int bad = find_overlap(particles, cfg.L, cfg.periodic);
+            const int bad = find_overlap(particles, L, periodic);
             if (bad >= 0) {
                 std::cerr << "verification failed: particle " << bad << " overlaps\n";
                 return 2;
@@ -107,30 +96,40 @@ int main(int argc, char* argv[]) {
             std::cerr << "verification passed\n";
         }
 
-        write_static(program.get<std::string>("--static-out"), particles, cfg.L);
-        write_dynamic(program.get<std::string>("--dynamic-out"), particles);
+        // Cell size criteria
+        const double r_max = max_radius(particles);
+        const int m_max = cim_max_grid_side(L, rc, r_max);
+        int M = program.get<int>("-M");
 
-        std::cerr << "generated " << particles.size() << " particles in " << stats.seconds << " s"
-                  << " | grid " << stats.grid_side << "x" << stats.grid_side
-                  << " | attempts/particle " << static_cast<double>(stats.attempts) / std::max(cfg.N, 1)
-                  << " | packing fraction " << stats.packing_fraction << '\n';
+        if (m_max < 1) {
+            std::cerr << "error: rc + 2*r_max = " << rc + 2.0 * r_max
+                      << " does not fit in a box of side " << L << ": no valid M exists\n";
+            return 1;
+        }
+        if (M == 0) {
+            M = m_max;  // 0 means "use the finest grid the criterion allows"
+        } else if (M < 1 || M > m_max) {
+            std::cerr << "error: M=" << M << " is out of range 1.." << m_max
+                      << " for L=" << L << ", rc=" << rc << ", r_max=" << r_max
+                      << " (the cell side L/M must be at least rc + 2*r_max = "
+                      << rc + 2.0 * r_max << ")\n";
+            return 1;
+        }
+
+        std::cerr << "grid: M=" << M << " (max " << m_max << ") | cell " << L / M
+                  << " >= rc + 2*r_max = " << rc + 2.0 * r_max << '\n';
 
         const std::string method = program.get<std::string>("--method");
-        const double rc = program.get<double>("--rc");
         if (method == "none") return 0;
         if (method != "brute") {
             std::cerr << "error: unknown --method '" << method << "' (brute | none)\n";
-            return 1;
-        }
-        if (rc < 0.0) {
-            std::cerr << "error: rc must be non-negative\n";
             return 1;
         }
 
         // Only the search is timed: neither the generation above nor the file
         // written below belongs in the measurement.
         const auto t0 = std::chrono::steady_clock::now();
-        const NeighborLists neighbors = brute_force_neighbors(particles, cfg.L, rc, cfg.periodic);
+        const NeighborLists neighbors = brute_force_neighbors(particles, L, rc, periodic);
         const double seconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - t0).count();
 

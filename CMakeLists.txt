@@ -22,6 +22,7 @@ FetchContent_MakeAvailable(argparse)
 add_executable(CIM-TP1
     src/main.cpp
     src/generator.cpp
+    src/io.cpp
     src/neighbors.cpp
 )
 

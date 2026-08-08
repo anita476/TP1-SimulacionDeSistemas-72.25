@@ -1,0 +1,105 @@
+#include "io.hpp"
+
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <stdexcept>
+
+namespace {
+
+// Creates the output folder if the caller asked for one that does not exist yet.
+void ensure_parent_dir(const std::string& path) {
+    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) std::filesystem::create_directories(parent);
+}
+
+[[noreturn]] void fail(const std::string& path, const std::string& what) {
+    throw std::runtime_error(path + ": " + what);
+}
+
+}
+
+Configuration read_configuration(const std::string& static_path,
+                                 const std::string& dynamic_path) {
+    std::ifstream sf(static_path);
+    if (!sf) fail(static_path, "cannot open for reading");
+
+    std::size_t n = 0;
+    double L = 0.0;
+    if (!(sf >> n >> L)) fail(static_path, "expected the N and L headings on the first two lines");
+    if (n == 0) fail(static_path, "declares 0 particles (is this really a static file?)");
+    if (L <= 0.0) fail(static_path, "L must be positive");
+
+    Configuration config;
+    config.L = L;
+    config.particles.resize(n);
+
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!(sf >> config.particles[i].r)) {
+            fail(static_path, "expected " + std::to_string(n) + " radii, file ends at " +
+                                  std::to_string(i));
+        }
+        if (config.particles[i].r <= 0.0) {
+            fail(static_path, "radius " + std::to_string(i) + " must be positive");
+        }
+        std::string rest;
+        std::getline(sf, rest);
+    }
+
+    std::ifstream df(dynamic_path);
+    if (!df) fail(dynamic_path, "cannot open for reading");
+
+    double time = 0.0;
+    if (!(df >> time)) fail(dynamic_path, "expected the time heading on the first line");
+
+    for (std::size_t i = 0; i < n; ++i) {
+        Particle& p = config.particles[i];
+        if (!(df >> p.x >> p.y)) {
+            fail(dynamic_path, "expected " + std::to_string(n) + " positions, file ends at " +
+                                   std::to_string(i));
+        }
+        if (p.x < 0.0 || p.x > L || p.y < 0.0 || p.y > L) {
+            std::ostringstream msg;
+            msg << "particle " << i << " at (" << p.x << ", " << p.y
+                << ") lies outside the box of side " << L
+                << " (do the static and dynamic files belong together?)";
+            fail(dynamic_path, msg.str());
+        }
+        std::string rest;
+        std::getline(df, rest);  // velocities, if present
+    }
+
+    return config;
+}
+
+void write_static(const std::string& path, const std::vector<Particle>& particles, double L) {
+    ensure_parent_dir(path);
+    std::ofstream out(path);
+    if (!out) fail(path, "cannot open for writing");
+    out << particles.size() << '\n' << std::setprecision(12) << L << '\n';
+    for (const Particle& p : particles) {
+        out << p.r << " 1\n";  // property column: unit mass placeholder
+    }
+}
+
+void write_dynamic(const std::string& path, const std::vector<Particle>& particles) {
+    ensure_parent_dir(path);
+    std::ofstream out(path);
+    if (!out) fail(path, "cannot open for writing");
+    out << "0\n" << std::setprecision(12);
+    for (const Particle& p : particles) {
+        out << p.x << ' ' << p.y << " 0 0\n";
+    }
+}
+
+void write_neighbors(const std::string& path, const NeighborLists& neighbors) {
+    ensure_parent_dir(path);
+    std::ofstream out(path);
+    if (!out) fail(path, "cannot open for writing");
+    for (std::size_t i = 0; i < neighbors.size(); ++i) {
+        out << i << ':';
+        for (int j : neighbors[i]) out << ' ' << j;
+        out << '\n';
+    }
+}
