@@ -2,6 +2,7 @@
 #include <argparse/argparse.hpp>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -14,8 +15,15 @@
 
 namespace {
 
+// Creates the output folder if the caller asked for one that does not exist yet.
+void ensure_parent_dir(const std::string& path) {
+    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) std::filesystem::create_directories(parent);
+}
+
 // Static file: N, L and then one "radius property" line per particle.
 void write_static(const std::string& path, const std::vector<Particle>& particles, double L) {
+    ensure_parent_dir(path);
     std::ofstream out(path);
     if (!out) throw std::runtime_error("cannot write " + path);
     out << particles.size() << '\n' << std::setprecision(12) << L << '\n';
@@ -26,6 +34,7 @@ void write_static(const std::string& path, const std::vector<Particle>& particle
 
 // Dynamic file: a single time t0 followed by "x y vx vy" per particle.
 void write_dynamic(const std::string& path, const std::vector<Particle>& particles) {
+    ensure_parent_dir(path);
     std::ofstream out(path);
     if (!out) throw std::runtime_error("cannot write " + path);
     out << "0\n" << std::setprecision(12);
@@ -46,8 +55,8 @@ int main(int argc, char* argv[]) {
     program.add_argument("--seed").help("RNG seed").default_value(std::string("42"));
     program.add_argument("--attempts").help("rejection budget per particle").default_value(20000).scan<'i', int>();
     program.add_argument("--periodic").help("use periodic boundary conditions").flag();
-    program.add_argument("--static-out").help("static output file").default_value(std::string("static.txt"));
-    program.add_argument("--dynamic-out").help("dynamic output file").default_value(std::string("dynamic.txt"));
+    program.add_argument("--static-out").help("static output file").default_value(std::string("data/static.txt"));
+    program.add_argument("--dynamic-out").help("dynamic output file").default_value(std::string("data/dynamic.txt"));
     program.add_argument("--verify").help("run the O(N^2) overlap check on the result").flag();
 
     try {
