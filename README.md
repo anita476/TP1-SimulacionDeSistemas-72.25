@@ -14,10 +14,13 @@ con `N` partículas de radio no nulo, cuáles distan menos de `rc` **borde a bor
 │   ├── geometry.hpp        mínima imagen + criterio de distancia borde a borde
 │   ├── cell_grid.hpp       grilla uniforme de M x M celdas
 │   ├── generator.hpp/.cpp  generación de partículas no superpuestas
+│   ├── neighbors.hpp/.cpp  fuerza bruta y Cell Index Method
+│   ├── io.hpp/.cpp         lectura y escritura de los archivos de la cátedra
 │   └── main.cpp            CLI y escritura de archivos
 ├── python/                 análisis y visualización
 │   ├── requirements.txt
-│   └── visualize.py        figura de partículas y vecinas
+│   ├── visualize.py        figura de partículas y vecinas
+│   └── animate_cim.py      animación paso a paso del barrido del CIM
 ├── data/                   archivos generados (fuera de git)
 ├── figures/                figuras generadas (fuera de git)
 └── CMakeLists.txt
@@ -71,12 +74,13 @@ grilla usada, los intentos por partícula y la fracción de empaquetamiento.
 | `-M` | celdas por lado; `0` usa el máximo permitido | 0 |
 | `--periodic` | condiciones periódicas de contorno | paredes |
 | `--rc` | radio de interacción | 1.0 |
-| `--method` | búsqueda de vecinas: `brute` o `none` | `brute` |
+| `--method` | búsqueda de vecinas: `cim`, `brute` o `none` | `brute` |
 | `--input-static` / `--input-dynamic` | leer la configuración en vez de generarla | — |
 | `--seed` | semilla del generador | 42 |
 | `--attempts` | intentos por partícula antes de fallar | 20000 |
 | `--verify` | chequeo O(N²) de que no hay solapamientos | off |
 | `--static-out` / `--dynamic-out` / `--neighbors-out` | archivos de salida | `data/…` |
+| `--trace` | traza del barrido del CIM para `animate_cim.py` | — |
 
 `--method none` genera las partículas y no busca vecinas: sirve para medir sólo la
 generación, y es obligatorio si `N` es grande, porque la fuerza bruta es O(N²).
@@ -116,6 +120,36 @@ las partículas reales, no del parámetro `--rmax`.
 Códigos de salida: `0` ok, `1` error de parámetros o densidad inalcanzable,
 `2` la verificación encontró un solapamiento.
 
+## Cell Index Method
+
+```bash
+./build/CIM-TP1 -N 1000 -L 20 --rc 1.0 -M 13 --method cim
+```
+
+Cada celda se toma como foco una sola vez. Dentro del foco se recorren los pares
+propios (posiciones `i < j` dentro de la misma celda) y después se abren **cuatro** de las
+ocho celdas vecinas:
+
+```
+SE (+1, -1)   E (+1, 0)   NE (+1, +1)   N (0, +1)
+```
+
+Es el *half-shell*, y es exactamente el conjunto que se muestra en clase y en Allen &
+Tildesley p. 152.
+
+## Animar el barrido
+
+```bash
+./build/CIM-TP1 -N 40 -L 20 --rc 2.0 --seed 7 -M 5 --method cim --trace data/trace.txt
+python python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps 6
+```
+
+`--trace` escribe una línea por decisión del barrido (celda foco, celda del
+half-shell abierta, y el veredicto de cada par medido). `animate_cim.py` sólo
+reproduce ese archivo.
+
+`--stride` submuestrea los pares y `--max-frames` acota el total.
+
 ## Visualizar
 
 ```bash
@@ -139,6 +173,30 @@ vecinas numeradas desde 1 en lugar de desde 0.
 | 1 — salida de lista de vecinas y tiempo | listo |
 | 1 — leer estático/dinámico como input | listo |
 | 1 — error si `M > L/(rc + 2·r_max)` | listo |
-| 1 — Cell Index Method (paredes y periódico) | pendiente |
+| 1 — Cell Index Method (paredes y periódico) | listo |
+| 2 — demostración en vivo | animación en `figures/cim.gif` |
 | 3 — tiempo en función de M | pendiente |
-| 4 — tiempo en función de N | pendiente |
+| 4.1 — tiempo en función de N, `L` fijo | pendiente |
+| 4.2 — tiempo en función de N, densidad fija | pendiente |
+
+Falta la infraestructura de medición que piden los puntos 3 y 4: repetir la búsqueda
+varias veces sobre la misma configuración y reportar promedio y desvío estándar.
+
+## Bibliografía
+
+- Allen, M. P. & Tildesley, D. J., *Computer Simulation of Liquids*, Oxford, 1989.
+  - §5.3.2 «Cell structures and linked lists», pp. 149–152 — el método completo.
+  - p. 150 — el criterio `l = L/M` mayor al radio de corte, y `N_c = N/M²`.
+  - p. 151 — costo `9·N·N_c`, o `4.5·N·N_c` aprovechando la tercera ley.
+  - p. 152 — el half-shell, y la advertencia de que para `N` chico el costo de
+    armar las listas no compensa.
+  - §5.3.1, pp. 147–149 — listas de Verlet, la alternativa que no usamos.
+  - §1.5.2 y programa F.01 — condiciones periódicas e imagen mínima.
+  - programa F.18 — evitar la raíz cuadrada, que es lo que hace `within_cutoff`.
+  - programa F.20 — implementación de referencia del método de celdas.
+- Quentrec, B. & Brot, C., «New method for searching for neighbours in molecular
+  dynamics computations», *J. Comput. Phys.* **13**(3), 430–432, 1973 — el método
+  original de celdas.
+- Hockney, R. W. & Eastwood, J. W., *Computer Simulation Using Particles*, 1981,
+  cap. 8 — listas enlazadas.
+- Teórica 1 de la cátedra, láminas 19–28 — planteo del CIM y consigna del TP.

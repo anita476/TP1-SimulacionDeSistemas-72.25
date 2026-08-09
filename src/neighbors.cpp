@@ -46,15 +46,17 @@ NeighborLists brute_force_neighbors(const std::vector<Particle> &particles,
     return neighbors;
 }
 
-// Half-shell: for every offset d in this table -d is absent so each pair of adjacent is visited exactly once, from one side only.
-// A&T p. 152: cell 13 checks only 9, 14, 18, 19 -- "interactions between cells 12 and 13 are checked when cell 12 is the focus of attention" & class notes ppt page 25
-//  NW (si)   N (si)   NE (si)        dy = +1  → all three pass
-//   W (no)   ·        E  (no)        dy =  0  → only dx > 0
-//  SW (no)   S (no)   SE (no)        dy = -1  → none
-// dy > 0   ||   (dy == 0 && dx > 0)
+// Half-shell: for every offset d in this table -d is absent, so each pair of adjacent
+// cells is visited exactly once, from one side only, and d_ij == d_ji is never counted
+// twice.
+//
+// A&T p. 152 & Teorica 1 p.25. In A&T Fig. 5.5 show the half-shell to be: SE, E, NE and N. That is:
+//    NW (no)   N (si)   NE (si)
+//     W (no)   ·        E  (si)
+//    SW (no)   S (no)   SE (si)
 
 constexpr int kHalfShellCount = 4;
-constexpr int kHalfShell[kHalfShellCount][2] = {{+1, 0}, {+1, +1}, {0, +1}, {-1, +1}};
+constexpr int kHalfShell[kHalfShellCount][2] = {{+1, -1}, {+1, 0}, {+1, +1}, {0, +1}};
 
 NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, double rc, int M, bool periodic,
                             std::ostream *trace)
