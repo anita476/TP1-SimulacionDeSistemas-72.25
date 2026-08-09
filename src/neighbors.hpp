@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iosfwd>
 #include <vector>
 
 #include "particle.hpp"
@@ -18,3 +19,9 @@ double max_radius(const std::vector<Particle>& particles);
 // Measures every pair: N*(N-1)/2 distance tests.
 NeighborLists brute_force_neighbors(const std::vector<Particle>& particles, double L, double rc, bool periodic);
 
+// Cell Index Method: MxM grid, own cell + half-shell (L-shape for symmetry) of neighbors
+//
+// When `trace` is non-null every decision the sweep makes is written to it in the
+// grammar python/animate_cim.py replays. Leave it null for timing runs.
+NeighborLists cim_neighbors(const std::vector<Particle>& particles, double L, double rc, int M, bool periodic,
+                            std::ostream* trace = nullptr);

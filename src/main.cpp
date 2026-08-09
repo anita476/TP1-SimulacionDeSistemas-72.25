@@ -3,6 +3,8 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -22,7 +24,7 @@ int main(int argc, char* argv[]) {
     program.add_argument("--rmin").help("minimum particle radius").default_value(0.23).scan<'g', double>();
     program.add_argument("--rmax").help("maximum particle radius").default_value(0.26).scan<'g', double>();
     program.add_argument("--rc").help("interaction radius").default_value(1.0).scan<'g', double>();
-    program.add_argument("--method").help("neighbour search: brute | none").default_value(std::string("brute"));
+    program.add_argument("--method").help("neighbour search: brute | cim | none").default_value(std::string("brute"));
     program.add_argument("--periodic").help("use periodic boundary conditions").flag();
     program.add_argument("--seed").help("RNG seed").default_value(std::string("42"));
     program.add_argument("--attempts").help("rejection budget per particle").default_value(20000).scan<'i', int>();
@@ -32,6 +34,7 @@ int main(int argc, char* argv[]) {
     program.add_argument("--static-out").help("static output file").default_value(std::string("data/static.txt"));
     program.add_argument("--dynamic-out").help("dynamic output file").default_value(std::string("data/dynamic.txt"));
     program.add_argument("--neighbors-out").help("neighbour list output file").default_value(std::string("data/neighbors.txt"));
+    program.add_argument("--trace").help("write a CIM sweep trace here for python/animate_cim.py").default_value(std::string(""));
 
     try {
         program.parse_args(argc, argv);
@@ -121,15 +124,37 @@ int main(int argc, char* argv[]) {
 
         const std::string method = program.get<std::string>("--method");
         if (method == "none") return 0;
-        if (method != "brute") {
-            std::cerr << "error: unknown --method '" << method << "' (brute | none)\n";
+        if (method != "brute" && method != "cim") {
+            std::cerr << "error: unknown --method '" << method << "' (brute | cim | none)\n";
             return 1;
         }
+
+        // Tracing writes one line per pair test, so it is only ever meant for the
+        // small runs the animator replays. A timing run leaves --trace empty and
+        // the sink null.
+        const std::string trace_path = program.get<std::string>("--trace");
+        std::ofstream trace_file;
+        if (!trace_path.empty()) {
+            if (method != "cim") {
+                std::cerr << "error: --trace only applies to --method cim\n";
+                return 1;
+            }
+            std::filesystem::path parent = std::filesystem::path(trace_path).parent_path();
+            if (!parent.empty()) std::filesystem::create_directories(parent);
+            trace_file.open(trace_path);
+            if (!trace_file) {
+                std::cerr << "error: cannot open " << trace_path << " for writing\n";
+                return 1;
+            }
+        }
+        std::ostream* trace = trace_file.is_open() ? &trace_file : nullptr;
 
         // Only the search is timed: neither the generation above nor the file
         // written below belongs in the measurement.
         const auto t0 = std::chrono::steady_clock::now();
-        const NeighborLists neighbors = brute_force_neighbors(particles, L, rc, periodic);
+        const NeighborLists neighbors = method == "cim"
+            ? cim_neighbors(particles, L, rc, M, periodic, trace)
+            : brute_force_neighbors(particles, L, rc, periodic);
         const double seconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - t0).count();
 
@@ -138,7 +163,7 @@ int main(int argc, char* argv[]) {
 
         write_neighbors(program.get<std::string>("--neighbors-out"), neighbors);
 
-        std::cerr << "brute force: rc=" << rc << " | " << seconds << " s | "
+        std::cerr << method << ": rc=" << rc << " | " << seconds << " s | "
                   << pairs / 2 << " pairs | "
                   << static_cast<double>(pairs) / std::max<std::size_t>(neighbors.size(), 1)
                   << " neighbours/particle\n";

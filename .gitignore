@@ -225,3 +225,10 @@ build/*
 
 data/
 figures/
+Teorica_1 (1).pdf
+ArchivosEjemplo/AlgunosVecinos_100_rc6.txt
+ArchivosEjemplo/Dynamic100.txt
+ArchivosEjemplo/FormatoOutput_CIM.txt
+ArchivosEjemplo/Static100.txt
+.gitignore
+ArchivosEjemplo/.DS_Store

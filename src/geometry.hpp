@@ -5,7 +5,7 @@
 // Shortest signed separation along one axis. Under periodic boundary conditions
 // this is the minimum image convention; against walls it is just the raw
 // difference. Valid as long as the interaction range stays below L/2, which the
-// cell-size criteria in this project already guarantee.
+// cell-size criteria in this project already guarantees.
 inline double axis_separation(double d, double L, bool periodic) {
     if (!periodic) return d;
     const double half_L = 0.5 * L;
