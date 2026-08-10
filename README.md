@@ -5,6 +5,104 @@ Simulación de Sistemas — 72.25 — ITBA
 Implementación del **Cell Index Method** para detectar, en un área cuadrada de lado `L`
 con `N` partículas de radio no nulo, cuáles distan menos de `rc` **borde a borde**.
 
+## Reproducir todo, en orden
+
+Desde la raíz del repositorio. En Windows nativo, agregar `.exe` al ejecutable y
+correr desde la *Developer Command Prompt for VS 2022*.
+
+**1.** Dependencias del sistema (Linux / WSL; omitir si ya están):
+
+```bash
+sudo apt install -y build-essential cmake git python3-matplotlib
+```
+
+**2.** Compilar:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+```
+
+**3.** Generar 1000 partículas con paredes, buscar vecinas con el CIM y verificar
+que ninguna se solapa:
+
+```bash
+./build/CIM-TP1 -N 1000 -L 20 --rc 1.0 -M 13 --seed 42 --method cim --verify
+```
+
+**4.** Lo mismo con condiciones periódicas de contorno. Va a archivos aparte para
+no pisar la configuración con paredes, que los pasos 6 a 8 vuelven a usar:
+
+```bash
+./build/CIM-TP1 -N 1000 -L 20 --rc 1.0 -M 13 --seed 42 --method cim --periodic --verify --static-out data/static_pbc.txt --dynamic-out data/dynamic_pbc.txt --neighbors-out data/neighbors_pbc.txt
+```
+
+**5.** Figura del punto 1: una partícula resaltada y sus vecinas:
+
+```bash
+python3 python/visualize.py --particle 42 --rc 1.0 --neighbors data/neighbors.txt --out figures/vecinas.png
+```
+
+**6.** Correr la fuerza bruta sobre **la misma** configuración, leyéndola de disco:
+
+```bash
+./build/CIM-TP1 --input-static data/static.txt --input-dynamic data/dynamic.txt --rc 1.0 --method brute --neighbors-out data/nb_brute.txt
+```
+
+**7.** Y el CIM sobre esa misma configuración:
+
+```bash
+./build/CIM-TP1 --input-static data/static.txt --input-dynamic data/dynamic.txt --rc 1.0 -M 13 --method cim --neighbors-out data/nb_cim.txt
+```
+
+**8.** Comparar ambas listas. Tiene que imprimir `IDENTICAS`:
+
+```bash
+python3 python/compare_neighbors.py data/nb_brute.txt data/nb_cim.txt
+```
+
+**9.** Comprobar que un `M` mayor al máximo da error (exit code 1):
+
+```bash
+./build/CIM-TP1 -N 1000 -L 20 --rc 1.0 -M 14 --method cim
+```
+
+**10.** Trazar el barrido de un caso chico y animarlo:
+
+```bash
+./build/CIM-TP1 -N 40 -L 20 --rc 2.0 --seed 7 -M 5 --method cim --trace data/trace.txt
+```
+
+```bash
+python3 python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps 6
+```
+
+**11.** Punto 3, barrido de `M` para dos valores de `N`:
+
+```bash
+python3 python/benchmark.py --part 3 --repeat 100
+```
+
+**12.** Graficarlo. Imprime el `M` óptimo, que hace falta en el paso siguiente:
+
+```bash
+python3 python/plot_m.py
+```
+
+**13.** Punto 4, barrido de `N` con ese `M` óptimo, en los dos regímenes de densidad:
+
+```bash
+python3 python/benchmark.py --part 4 --M 13 --repeat 100
+```
+
+**14.** Graficar las dos curvas superpuestas:
+
+```bash
+python3 python/plot_n.py
+```
+
+Al terminar, en `figures/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
+`tiempo_vs_N.png`.
+
 ## Estructura
 
 ```
@@ -19,8 +117,13 @@ con `N` partículas de radio no nulo, cuáles distan menos de `rc` **borde a bor
 │   └── main.cpp            CLI y escritura de archivos
 ├── python/                 análisis y visualización
 │   ├── requirements.txt
-│   ├── visualize.py        figura de partículas y vecinas
-│   └── animate_cim.py      animación paso a paso del barrido del CIM
+│   ├── visualize.py           figura de partículas y vecinas
+│   ├── animate_cim.py         animación paso a paso del barrido del CIM
+│   ├── compare_neighbors.py   valida el CIM contra la fuerza bruta
+│   ├── benchmark.py           barridos de M y de N (puntos 3 y 4)
+│   ├── plot_m.py              tiempo en función de M
+│   ├── plot_n.py              tiempo en función de N
+│   └── bench_common.py        carga de los CSV y estadística compartida
 ├── data/                   archivos generados (fuera de git)
 ├── figures/                figuras generadas (fuera de git)
 └── CMakeLists.txt
@@ -163,6 +266,27 @@ agrega la imagen mínima de las vecinas que interactúan cruzando el borde.
 Sin `--neighbors` dibuja sólo las posiciones. Con `--index-base 1` lee listas de
 vecinas numeradas desde 1 en lugar de desde 0.
 
+## Estudio paramétrico (puntos 3 y 4)
+
+```bash
+python3 python/benchmark.py --part 3 && python3 python/plot_m.py
+```
+
+Barre `M` de 1 hasta el máximo, para dos valores de `N` (uno intermedio y el más
+alto que la geometría admite), cronometrando la búsqueda `--repeat` veces por
+punto. `plot_m.py` grafica promedio ± desvío estándar e imprime el `M` óptimo.
+
+```bash
+python3 python/benchmark.py --part 4 --M 13 && python3 python/plot_n.py
+```
+
+Barre `N` con ese `M`: **densidad libre** (`L=20` fijo) y **densidad fija**
+(`L ∝ √N`), superpuestas en la misma figura.
+
+Todos los valores de `M` de un mismo `N` se miden sobre **la misma
+configuración**, leída desde disco, así la comparación es pareada y las
+diferencias son del algoritmo y no del muestreo.
+
 ## Estado
 
 | Punto del enunciado | Estado |
@@ -175,9 +299,9 @@ vecinas numeradas desde 1 en lugar de desde 0.
 | 1 — error si `M > L/(rc + 2·r_max)` | listo |
 | 1 — Cell Index Method (paredes y periódico) | listo |
 | 2 — demostración en vivo | animación en `figures/cim.gif` |
-| 3 — tiempo en función de M | pendiente |
-| 4.1 — tiempo en función de N, `L` fijo | pendiente |
-| 4.2 — tiempo en función de N, densidad fija | pendiente |
+| 3 — tiempo en función de M | listo |
+| 4.1 — tiempo en función de N, `L` fijo | listo |
+| 4.2 — tiempo en función de N, densidad fija | listo |
 
 Falta la infraestructura de medición que piden los puntos 3 y 4: repetir la búsqueda
 varias veces sobre la misma configuración y reportar promedio y desvío estándar.

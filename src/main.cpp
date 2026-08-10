@@ -34,6 +34,10 @@ int main(int argc, char* argv[]) {
     program.add_argument("--static-out").help("static output file").default_value(std::string("data/static.txt"));
     program.add_argument("--dynamic-out").help("dynamic output file").default_value(std::string("data/dynamic.txt"));
     program.add_argument("--neighbors-out").help("neighbour list output file").default_value(std::string("data/neighbors.txt"));
+    program.add_argument("--repeat").help("time the search this many times").default_value(1).scan<'i', int>();
+    program.add_argument("--warmup").help("searches to run and discard first").default_value(0).scan<'i', int>();
+    program.add_argument("--csv").help("append one timing row per run to this file").default_value(std::string(""));
+    program.add_argument("--tag").help("label written in the first CSV column").default_value(std::string(""));
     program.add_argument("--trace").help("write a CIM sweep trace here for python/animate_cim.py").default_value(std::string(""));
 
     try {
@@ -149,21 +153,47 @@ int main(int argc, char* argv[]) {
         }
         std::ostream* trace = trace_file.is_open() ? &trace_file : nullptr;
 
-        // Only the search is timed: neither the generation above nor the file
-        // written below belongs in the measurement.
-        const auto t0 = std::chrono::steady_clock::now();
-        const NeighborLists neighbors = method == "cim"
-            ? cim_neighbors(particles, L, rc, M, periodic, trace)
-            : brute_force_neighbors(particles, L, rc, periodic);
-        const double seconds = std::chrono::duration<double>(
-            std::chrono::steady_clock::now() - t0).count();
+        const int repeat = program.get<int>("--repeat");
+        const int warmup = program.get<int>("--warmup");
+        if (repeat < 1 || warmup < 0) {
+            std::cerr << "error: --repeat must be >= 1 and --warmup >= 0\n";
+            return 1;
+        }
+
+        // The search is run repeat+warmup times and every run is timed on its
+        // own. Only the search is inside the clock.
+        NeighborLists neighbors;
+        std::vector<double> times;
+        times.reserve(static_cast<std::size_t>(repeat));
+
+        for (int run = 0; run < warmup + repeat; ++run) {
+            const auto t0 = std::chrono::steady_clock::now();
+            neighbors = method == "cim"
+                ? cim_neighbors(particles, L, rc, M, periodic, trace)
+                : brute_force_neighbors(particles, L, rc, periodic);
+            const double seconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0).count();
+            if (run >= warmup) times.push_back(seconds);
+        }
 
         std::size_t pairs = 0;
         for (const std::vector<int>& list : neighbors) pairs += list.size();
 
         write_neighbors(program.get<std::string>("--neighbors-out"), neighbors);
 
-        std::cerr << method << ": rc=" << rc << " | " << seconds << " s | "
+        const std::string csv_path = program.get<std::string>("--csv");
+        if (!csv_path.empty()) {
+            append_timings(csv_path, program.get<std::string>("--tag"), method,
+                           static_cast<int>(particles.size()), L, M, rc, periodic,
+                           program.get<std::string>("--seed"), times);
+        }
+
+        double mean = 0.0;
+        for (double t : times) mean += t;
+        mean /= static_cast<double>(times.size());
+
+        std::cerr << method << ": rc=" << rc << " | " << mean << " s"
+                  << (repeat > 1 ? " (mean of " + std::to_string(repeat) + ")" : "") << " | "
                   << pairs / 2 << " pairs | "
                   << static_cast<double>(pairs) / std::max<std::size_t>(neighbors.size(), 1)
                   << " neighbours/particle\n";

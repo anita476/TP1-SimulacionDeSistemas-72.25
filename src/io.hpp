@@ -18,3 +18,7 @@ Configuration read_configuration(const std::string& static_path, const std::stri
 void write_static(const std::string& path, const std::vector<Particle>& particles, double L);
 void write_dynamic(const std::string& path, const std::vector<Particle>& particles);
 void write_neighbors(const std::string& path, const NeighborLists& neighbors);
+
+void append_timings(const std::string& path, const std::string& tag, const std::string& method,
+                    int N, double L, int M, double rc, bool periodic, const std::string& seed,
+                    const std::vector<double>& seconds);
