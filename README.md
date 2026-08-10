@@ -79,7 +79,7 @@ python3 python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps
 **11.** Punto 3, barrido de `M` para dos valores de `N`:
 
 ```bash
-python3 python/benchmark.py --part 3 --repeat 100
+python3 python/benchmark.py --part 3 --repeat 100 --rounds 5
 ```
 
 **12.** Graficarlo. Imprime el `M` óptimo, que hace falta en el paso siguiente:
@@ -91,7 +91,7 @@ python3 python/plot_m.py
 **13.** Punto 4, barrido de `N` con ese `M` óptimo, en los dos regímenes de densidad:
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 --repeat 100
+python3 python/benchmark.py --part 4 --M 13 --repeat 100 --rounds 5
 ```
 
 **14.** Graficar las dos curvas superpuestas:
@@ -276,6 +276,17 @@ python3 python/benchmark.py --part 3 && python3 python/plot_m.py
 Barre `M` de 1 hasta el máximo, para dos valores de `N` (uno intermedio y el más
 alto que la geometría admite), cronometrando la búsqueda `--repeat` veces por
 punto. `plot_m.py` grafica promedio ± desvío estándar e imprime el `M` óptimo.
+
+`--rounds` repite el **barrido entero**, no la búsqueda dentro de cada punto. Es
+necesario: medir todos los M de corrido en una sola pasada confunde la deriva de
+la máquina (frecuencia de CPU, caché) con el valor de M. Medido, la dispersión
+entre barridos resulta **3 a 7 veces** el error estándar que reporta un solo
+barrido, y con una sola pasada el `M` óptimo se movía entre 12 y 13 de corrida en
+corrida. Con 5 vueltas queda estable en 13.
+
+Por eso `plot_m.py` decide qué valores de `M` son equivalentes usando la
+dispersión **entre vueltas**, no la de las búsquedas individuales, y además de
+un único óptimo informa el conjunto de `M` indistinguibles a 2 sigma.
 
 ```bash
 python3 python/benchmark.py --part 4 --M 13 && python3 python/plot_n.py

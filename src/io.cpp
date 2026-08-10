@@ -8,6 +8,8 @@
 
 namespace {
 
+constexpr int kDigits = 17;
+
 // Creates the output folder if the caller asked for one that does not exist yet.
 void ensure_parent_dir(const std::string& path) {
     const std::filesystem::path parent = std::filesystem::path(path).parent_path();
@@ -33,16 +35,17 @@ Configuration read_configuration(const std::string& static_path,
 
     Configuration config;
     config.L = L;
-    config.particles.resize(n);
 
     for (std::size_t i = 0; i < n; ++i) {
-        if (!(sf >> config.particles[i].r)) {
+        Particle p{};
+        if (!(sf >> p.r)) {
             fail(static_path, "expected " + std::to_string(n) + " radii, file ends at " +
                                   std::to_string(i));
         }
-        if (config.particles[i].r <= 0.0) {
+        if (p.r <= 0.0) {
             fail(static_path, "radius " + std::to_string(i) + " must be positive");
         }
+        config.particles.push_back(p);
         std::string rest;
         std::getline(sf, rest);
     }
@@ -77,20 +80,22 @@ void write_static(const std::string& path, const std::vector<Particle>& particle
     ensure_parent_dir(path);
     std::ofstream out(path);
     if (!out) fail(path, "cannot open for writing");
-    out << particles.size() << '\n' << std::setprecision(12) << L << '\n';
+    out << particles.size() << '\n' << std::setprecision(kDigits) << L << '\n';
     for (const Particle& p : particles) {
         out << p.r << " 1\n";  // property column: unit mass placeholder
     }
+    if (!out) fail(path, "write failed (disk full?)");
 }
 
 void write_dynamic(const std::string& path, const std::vector<Particle>& particles) {
     ensure_parent_dir(path);
     std::ofstream out(path);
     if (!out) fail(path, "cannot open for writing");
-    out << "0\n" << std::setprecision(12);
+    out << "0\n" << std::setprecision(kDigits);
     for (const Particle& p : particles) {
         out << p.x << ' ' << p.y << " 0 0\n";
     }
+    if (!out) fail(path, "write failed (disk full?)");
 }
 
 void append_timings(const std::string& path, const std::string& tag, const std::string& method,
@@ -108,6 +113,7 @@ void append_timings(const std::string& path, const std::string& tag, const std::
         out << tag << ',' << method << ',' << N << ',' << L << ',' << M << ',' << rc << ','
             << (periodic ? 1 : 0) << ',' << seed << ',' << run << ',' << seconds[run] << '\n';
     }
+    if (!out) fail(path, "write failed (disk full?)");
 }
 
 void write_neighbors(const std::string& path, const NeighborLists& neighbors) {
@@ -119,4 +125,5 @@ void write_neighbors(const std::string& path, const NeighborLists& neighbors) {
         for (int j : neighbors[i]) out << ' ' << j;
         out << '\n';
     }
+    if (!out) fail(path, "write failed (disk full?)");
 }

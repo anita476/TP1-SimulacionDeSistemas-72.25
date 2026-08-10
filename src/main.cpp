@@ -66,8 +66,12 @@ int main(int argc, char* argv[]) {
         double L = 0.0;
 
         if (!in_static.empty()) {
-            const Configuration config = read_configuration(in_static, in_dynamic);
-            particles = config.particles;
+            if (program.is_used("-N") || program.is_used("-L")) {
+                std::cerr << "warning: -N and -L are ignored when reading a configuration; "
+                             "N and L come from the files\n";
+            }
+            Configuration config = read_configuration(in_static, in_dynamic);
+            particles = std::move(config.particles);
             L = config.L;
             std::cerr << "read " << particles.size() << " particles from " << in_static
                       << " and " << in_dynamic << " | L=" << L << '\n';
@@ -79,7 +83,14 @@ int main(int argc, char* argv[]) {
             cfg.r_max = program.get<double>("--rmax");
             cfg.max_attempts = program.get<int>("--attempts");
             cfg.periodic = periodic;
-            cfg.seed = std::stoull(program.get<std::string>("--seed"));
+
+            const std::string seed_text = program.get<std::string>("--seed");
+            try {
+                cfg.seed = std::stoull(seed_text);
+            } catch (const std::exception&) {
+                std::cerr << "error: --seed '" << seed_text << "' is not a non-negative integer\n";
+                return 1;
+            }
 
             GeneratorStats stats;
             particles = generate_particles(cfg, &stats);

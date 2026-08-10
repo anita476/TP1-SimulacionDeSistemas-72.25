@@ -58,14 +58,10 @@ NeighborLists brute_force_neighbors(const std::vector<Particle> &particles,
 constexpr int kHalfShellCount = 4;
 constexpr int kHalfShell[kHalfShellCount][2] = {{+1, -1}, {+1, 0}, {+1, +1}, {0, +1}};
 
-NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, double rc, int M, bool periodic,
-                            std::ostream *trace)
+template <bool Trace>
+NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double rc, int M,
+                        bool periodic, std::ostream *trace)
 {
-    // if periodic && M < 3, the half-shell wraps onto cells it has already visited
-    // with M = 2: dx=-1 and dx=+1 land on the same column
-    // with M = 1: every offset lands on the focus cell
-    if (periodic && M < 3) return brute_force_neighbors(particles, L, rc, periodic);
-
     const int n = static_cast<int>(particles.size());
     NeighborLists neighbors(n);
     CellGrid grid(L, M);
@@ -75,7 +71,7 @@ NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, do
     }
 
     // for tracing
-    if (trace) {
+    if constexpr (Trace) {
         *trace << "L " << L << "\nM " << M << "\nRC " << rc
                << "\nPERIODIC " << (periodic ? 1 : 0) << '\n';
         for (int i = 0; i < n; ++i) {
@@ -93,13 +89,13 @@ NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, do
         }
     }
 
-    auto test_pair = [&](int a, int b, const char *tag) {
+    auto test_pair = [&](int a, int b, [[maybe_unused]] const char *tag) {
         const bool hit = within_cutoff(particles[a], particles[b], rc, L, periodic);
         if (hit) {
             neighbors[a].push_back(b);
             neighbors[b].push_back(a);
         }
-        if (trace) *trace << tag << ' ' << a << ' ' << b << ' ' << (hit ? 1 : 0) << '\n';
+        if constexpr (Trace) *trace << tag << ' ' << a << ' ' << b << ' ' << (hit ? 1 : 0) << '\n';
     };
 
     for (int cy = 0; cy < M; ++cy) {
@@ -107,9 +103,9 @@ NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, do
             const std::vector<int> &ids = grid.cell(grid.cell_index(cx, cy));
             const int n_cell = static_cast<int>(ids.size());
 
-            if (n_cell ==0) continue;
+            if (n_cell == 0) continue;
 
-            if (trace) *trace << "FOCUS " << cx << ' ' << cy << '\n';
+            if constexpr (Trace) *trace << "FOCUS " << cx << ' ' << cy << '\n';
 
             // own cell
             for (int i = 0; i < n_cell; ++i) {
@@ -135,7 +131,7 @@ NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, do
                 const std::vector<int> &nids = grid.cell(grid.cell_index(nx, ny));
                 const int nn_cell = static_cast<int>(nids.size());
 
-                if (trace) *trace << "SHELL " << nx << ' ' << ny << '\n';
+                if constexpr (Trace) *trace << "SHELL " << nx << ' ' << ny << '\n';
 
                 for (int i = 0; i < n_cell; ++i) {
                     for (int j = 0; j < nn_cell; ++j) {
@@ -147,4 +143,18 @@ NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, do
     }
 
     return neighbors;
+}
+
+NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, double rc, int M, bool periodic,
+                            std::ostream *trace)
+{
+    if (periodic && M < 3) {
+        if (trace) {
+            std::cerr << "warning: periodic with M=" << M
+                      << " degenerates to all pairs, so no sweep trace is written\n";
+        }
+        return brute_force_neighbors(particles, L, rc, periodic);
+    }
+    return trace ? cim_sweep<true>(particles, L, rc, M, periodic, trace)
+                 : cim_sweep<false>(particles, L, rc, M, periodic, nullptr);
 }

@@ -20,6 +20,7 @@ def load(path):
                 "M": int(row["M"]),
                 "rc": float(row["rc"]),
                 "periodic": row["periodic"] == "1",
+                "run": int(row["run"]),
                 "seconds": float(row["seconds"]),
             })
     if not rows:
@@ -43,6 +44,38 @@ def aggregate(rows, key):
         else:
             std = 0.0
         out[k] = (mean, std, n)
+    return out
+
+
+def sweep_error(rows, key):
+    """Uncertainty of each group's mean, estimated from the scatter between sweeps.
+
+    The searches inside one sweep share the machine's state, so they are not
+    independent and std/sqrt(n) over all of them is far too optimistic: measured,
+    the scatter between sweeps is 3 to 7 times larger. Each sweep restarts the
+    `run` column at 0, which is what lets the sweeps be told apart here.
+
+    Returns {key: (mean of the sweep means, standard error, number of sweeps)}.
+    """
+    buckets = defaultdict(list)
+    for row in rows:
+        k = key(row)
+        if row["run"] == 0:
+            buckets[k].append([])
+        if buckets[k]:
+            buckets[k][-1].append(row["seconds"])
+
+    out = {}
+    for k, sweeps in buckets.items():
+        means = [sum(s) / len(s) for s in sweeps if s]
+        n = len(means)
+        mean = sum(means) / n
+        if n > 1:
+            var = sum((m - mean) ** 2 for m in means) / (n - 1)
+            sem = math.sqrt(var / n)
+        else:
+            sem = float("inf")  # a single sweep says nothing about its own spread
+        out[k] = (mean, sem, n)
     return out
 
 
