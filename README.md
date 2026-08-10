@@ -177,7 +177,7 @@ grilla usada, los intentos por partícula y la fracción de empaquetamiento.
 | `-M` | celdas por lado; `0` usa el máximo permitido | 0 |
 | `--periodic` | condiciones periódicas de contorno | paredes |
 | `--rc` | radio de interacción | 1.0 |
-| `--method` | búsqueda de vecinas: `cim`, `brute` o `none` | `brute` |
+| `--method` | búsqueda de vecinas: `cim`, `brute` o `none` | `cim` |
 | `--input-static` / `--input-dynamic` | leer la configuración en vez de generarla | — |
 | `--seed` | semilla del generador | 42 |
 | `--attempts` | intentos por partícula antes de fallar | 20000 |
@@ -186,7 +186,8 @@ grilla usada, los intentos por partícula y la fracción de empaquetamiento.
 | `--trace` | traza del barrido del CIM para `animate_cim.py` | — |
 
 `--method none` genera las partículas y no busca vecinas: sirve para medir sólo la
-generación, y es obligatorio si `N` es grande, porque la fuerza bruta es O(N²).
+generación. `--method brute` es O(N²), así que con `N` grande conviene dejar el
+default `cim`: para N=10⁶ la fuerza bruta tarda unos 200 s y el CIM menos de uno.
 
 El archivo de vecinas tiene una línea por partícula:
 

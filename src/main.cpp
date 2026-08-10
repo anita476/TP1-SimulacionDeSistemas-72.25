@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     program.add_argument("--rmin").help("minimum particle radius").default_value(0.23).scan<'g', double>();
     program.add_argument("--rmax").help("maximum particle radius").default_value(0.26).scan<'g', double>();
     program.add_argument("--rc").help("interaction radius").default_value(1.0).scan<'g', double>();
-    program.add_argument("--method").help("neighbour search: brute | cim | none").default_value(std::string("brute"));
+    program.add_argument("--method").help("neighbour search: cim | brute | none").default_value(std::string("cim"));
     program.add_argument("--periodic").help("use periodic boundary conditions").flag();
     program.add_argument("--seed").help("RNG seed").default_value(std::string("42"));
     program.add_argument("--attempts").help("rejection budget per particle").default_value(20000).scan<'i', int>();
