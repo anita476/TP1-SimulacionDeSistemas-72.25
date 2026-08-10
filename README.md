@@ -129,11 +129,6 @@ Al terminar, en `figures/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
 └── CMakeLists.txt
 ```
 
-`data/` y `figures/` están enteras en el `.gitignore` y no se versionan: las crean
-el simulador y el visualizador la primera vez que escriben en ellas.
-
-La separación es la que pide la cátedra: **simulación → archivos → análisis**. El
-simulador no grafica; el visualizador no simula.
 
 ## Requisitos
 
@@ -153,9 +148,6 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 
 El ejecutable queda en `build/CIM-TP1` (`build/CIM-TP1.exe` en Windows nativo).
 
-> **No compartas `build/` entre WSL y Windows.** El `CMakeCache.txt` guarda rutas
-> absolutas (`/mnt/c/...` contra `C:/...`) y CMake se niega a reusarlo. Si cambiás
-> de entorno, borrá la carpeta: `rm -rf build`.
 
 ## Generar partículas
 
@@ -163,8 +155,6 @@ El ejecutable queda en `build/CIM-TP1` (`build/CIM-TP1.exe` en Windows nativo).
 ./build/CIM-TP1 -N 1000 -L 20 --seed 42 --verify
 ```
 
-Verificado que Windows (MSVC) y Linux (libstdc++) producen la **misma**
-configuración para la misma semilla.
 
 Escribe `data/static.txt` y `data/dynamic.txt`, y reporta por `stderr` el tiempo, la
 grilla usada, los intentos por partícula y la fracción de empaquetamiento.

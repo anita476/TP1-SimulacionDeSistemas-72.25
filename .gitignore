@@ -232,3 +232,5 @@ ArchivosEjemplo/FormatoOutput_CIM.txt
 ArchivosEjemplo/Static100.txt
 .gitignore
 ArchivosEjemplo/.DS_Store
+pypenv.cfg
+share/*
