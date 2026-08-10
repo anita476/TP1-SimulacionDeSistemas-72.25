@@ -39,8 +39,15 @@ no pisar la configuración con paredes, que los pasos 6 a 8 vuelven a usar:
 **5.** Figura del punto 1: una partícula resaltada y sus vecinas:
 
 ```bash
-python3 python/visualize.py --particle 42 --rc 1.0 --neighbors data/neighbors.txt --out figures/vecinas.png
+python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors.txt --out figures/vecinas.png
 ```
+Puede utilizarse la versión interactiva. Hacer clic para seleccionar una partícula o utilizar **n,p**.
+
+```bash
+ python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors_pbc.txt --interactive --periodic
+```
+
+>`--periodic` sirve para visualizar el caso con condiciones de contorno de mejor manera)
 
 **6.** Correr la fuerza bruta sobre **la misma** configuración, leyéndola de disco:
 

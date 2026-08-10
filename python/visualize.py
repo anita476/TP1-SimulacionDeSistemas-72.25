@@ -6,6 +6,13 @@ real radius, one of them highlighted, and its neighbours in a different colour.
 
     python python/visualize.py --particle 0 --neighbors data/neighbors.txt
 
+An interactive mode is also available: instead of rendering one static PNG for
+one particle, it opens a window where you click any particle to select it (or
+step through ids with n/p) and its neighbours update live.
+
+    python python/visualize.py --neighbors data/neighbors.txt --interactive
+    python python/visualize.py --rc 1.5 --periodic --interactive   # no file: neighbours computed on the fly
+
 The simulator writes the input files; this script only reads them. Keeping the
 two apart is the pipeline the course asks for: SIMULATION -> files -> ANALYSIS.
 """
@@ -19,6 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle
+from matplotlib.widgets import Slider
 
 OTHER_FACE = "#d9d9d9"
 OTHER_EDGE = "#9e9e9e"
@@ -80,8 +88,33 @@ def minimum_image(d, box, periodic):
     return d
 
 
-def plot(box, radii, positions, target, neighbours, rc, periodic, title, out_path, show):
-    fig, ax = plt.subplots(figsize=(8, 8))
+def neighbours_by_distance(target, positions, radii, box, periodic, rc):
+    """Neighbour ids whose centre falls within radii[target] + rc of the target.
+
+    Same criterion the dashed ring in the figure represents. Used in
+    interactive mode when no --neighbors file was given, so a click still
+    produces something to look at as long as --rc is set.
+    """
+    tx, ty = positions[target]
+    limit = radii[target] + rc
+    found = []
+    for j, (px, py) in enumerate(positions):
+        if j == target:
+            continue
+        dx = minimum_image(px - tx, box, periodic)
+        dy = minimum_image(py - ty, box, periodic)
+        if dx * dx + dy * dy <= limit * limit:
+            found.append(j)
+    return found
+
+
+def render(ax, box, radii, positions, target, neighbours, rc, periodic, title):
+    """Draws one frame on `ax`, clearing whatever was there before.
+
+    Shared by the static (one PNG) and interactive (redrawn on click) paths so
+    the two never drift apart visually.
+    """
+    ax.clear()
 
     highlighted = set(neighbours) | ({target} if target is not None else set())
     ghosts = []  # periodic images drawn outside the box; widen the view for them
@@ -161,6 +194,10 @@ def plot(box, radii, positions, target, neighbours, rc, periodic, title, out_pat
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.08),
               ncol=3, frameon=False)
 
+
+def plot(box, radii, positions, target, neighbours, rc, periodic, title, out_path, show):
+    fig, ax = plt.subplots(figsize=(8, 8))
+    render(ax, box, radii, positions, target, neighbours, rc, periodic, title)
     fig.tight_layout()
     if out_path:
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
@@ -170,6 +207,91 @@ def plot(box, radii, positions, target, neighbours, rc, periodic, title, out_pat
         plt.show()
     plt.close(fig)
 
+
+def closest_particle(positions, radii, x, y):
+    """Id of the particle whose circle contains (x, y), or None if none does.
+
+    Ties (overlapping circles) go to whichever centre is nearest the click.
+    """
+    best, best_d2 = None, None
+    for i, (px, py) in enumerate(positions):
+        d2 = (px - x) ** 2 + (py - y) ** 2
+        if d2 <= radii[i] ** 2 and (best_d2 is None or d2 < best_d2):
+            best, best_d2 = i, d2
+    return best
+
+
+def run_interactive(box, radii, positions, table, rc, periodic, start, index_base):
+    """Opens a window: click a particle to select it, n/p to step, q to quit.
+
+    Neighbours come from `table` (the --neighbors file) when it's not None;
+    otherwise, if --rc was given, they're computed on the fly from distance.
+    """
+    n = len(radii)
+    ids = sorted(table.keys()) if table is not None else list(range(n))
+    if not ids:
+        sys.exit("no hay partículas para mostrar en modo interactivo")
+
+    state = {"target": start if start in ids else ids[0]}
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    fig.subplots_adjust(bottom=0.17)
+    slider_ax = fig.add_axes((0.2, 0.04, 0.6, 0.03))
+    slider = Slider(slider_ax, "id", ids[0], ids[-1],
+                    valinit=state["target"], valstep=ids if len(ids) > 1 else None)
+
+    def neighbours_of(target):
+        if table is not None:
+            return [j for j in table.get(target, []) if j != target]
+        if rc is not None:
+            return neighbours_by_distance(target, positions, radii, box, periodic, rc)
+        return []
+
+    def redraw():
+        target = state["target"]
+        neighbours = neighbours_of(target)
+        boundary = "contorno periódico" if periodic else "paredes"
+        title = (f"N={n}  L={box:g}  ({boundary})\n"
+                 f"partícula {target}: {len(neighbours)} vecinas   "
+                 f"[click = seleccionar, n/p = siguiente/anterior, q = salir]")
+        render(ax, box, radii, positions, target, neighbours, rc, periodic, title)
+        slider.eventson = False
+        slider.set_val(target)
+        slider.eventson = True
+        fig.canvas.draw_idle()
+
+    def select(new_target):
+        if new_target in ids and new_target != state["target"]:
+            state["target"] = new_target
+            redraw()
+
+    def on_click(event):
+        if event.inaxes != ax or event.xdata is None:
+            return
+        picked = closest_particle(positions, radii, event.xdata, event.ydata)
+        if picked is not None:
+            select(picked)
+
+    def on_key(event):
+        if event.key == "q":
+            plt.close(fig)
+            return
+        if event.key not in ("n", "p"):
+            return
+        pos = ids.index(state["target"])
+        pos = (pos + 1) % len(ids) if event.key == "n" else (pos - 1) % len(ids)
+        select(ids[pos])
+
+    def on_slider(val):
+        # valstep already snaps to a valid id when the table restricts the set.
+        select(min(ids, key=lambda i: abs(i - val)))
+
+    fig.canvas.mpl_connect("button_press_event", on_click)
+    fig.canvas.mpl_connect("key_press_event", on_key)
+    slider.on_changed(on_slider)
+
+    redraw()
+    plt.show()
 
 def main():
     p = argparse.ArgumentParser(description="Visualizador de partículas y vecinas (TP1)")
@@ -184,9 +306,13 @@ def main():
                    help="base de los ids en el archivo de vecinas (default 0)")
     p.add_argument("--out", default="figures/neighbors.png", help="PNG de salida")
     p.add_argument("--show", action="store_true", help="abrir la figura en una ventana")
+    p.add_argument("--interactive", action="store_true",
+                   help="ventana interactiva: click en una partícula para "
+                        "seleccionarla (o --rc sin --neighbors para calcular "
+                        "las vecinas en el momento)")
     args = p.parse_args()
 
-    if not args.show:
+    if not args.show and not args.interactive:
         matplotlib.use("Agg")  # no display needed when only saving
 
     try:
@@ -199,12 +325,23 @@ def main():
     if target is not None and not (0 <= target < len(radii)):
         sys.exit(f"--particle {target} fuera de rango: hay {len(radii)} partículas (0..{len(radii) - 1})")
 
-    neighbours = []
+    table = None
     if args.neighbors:
         try:
             table = read_neighbors(args.neighbors, args.index_base)
         except (OSError, ValueError) as err:
             sys.exit(f"error leyendo {args.neighbors}: {err}")
+
+    if args.interactive:
+        if table is None and args.rc is None:
+            sys.exit("--interactive necesita --neighbors o --rc para saber "
+                      "quiénes son vecinas")
+        run_interactive(box, radii, positions, table, args.rc, args.periodic,
+                        target if target is not None else 0, args.index_base)
+        return
+
+    neighbours = []
+    if args.neighbors:
         if target is None:
             sys.exit("--neighbors requiere --particle para saber a quién resaltar")
         neighbours = [j for j in table.get(target, []) if j != target]
