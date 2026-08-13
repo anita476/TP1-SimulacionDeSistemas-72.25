@@ -304,7 +304,7 @@ def main():
                    help="contorno periódico: dibuja las imágenes mínimas")
     p.add_argument("--index-base", type=int, default=0, choices=(0, 1),
                    help="base de los ids en el archivo de vecinas (default 0)")
-    p.add_argument("--out", default="figures/neighbors.png", help="PNG de salida")
+    p.add_argument("--out", default="images/neighbors.png", help="PNG de salida")
     p.add_argument("--show", action="store_true", help="abrir la figura en una ventana")
     p.add_argument("--interactive", action="store_true",
                    help="ventana interactiva: click en una partícula para "

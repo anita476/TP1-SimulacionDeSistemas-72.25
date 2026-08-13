@@ -39,7 +39,7 @@ no pisar la configuración con paredes, que los pasos 6 a 8 vuelven a usar:
 **5.** Figura del punto 1: una partícula resaltada y sus vecinas:
 
 ```bash
-python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors.txt --out figures/vecinas.png
+python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors.txt --out images/vecinas.png
 ```
 Puede utilizarse la versión interactiva. Hacer clic para seleccionar una partícula o utilizar **n,p**.
 
@@ -89,7 +89,7 @@ python3 python/validate_m.py -N 1000 --seeds 1 2 3
 ```
 
 ```bash
-python3 python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps 6
+python3 python/animate_cim.py --trace data/trace.txt --out images/cim.gif --fps 6 --stride 5
 ```
 
 **11.** Punto 3, barrido de `M` para dos valores de `N`. Son 1000 búsquedas por punto,
@@ -119,8 +119,42 @@ python3 python/benchmark.py --part 4 --M 13 --rounds 20 --repeat 50
 python3 python/plot_n.py
 ```
 
-Al terminar, en `figures/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
-`tiempo_vs_N.png`.
+Al terminar, en `images/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
+`tiempo_vs_N.png`, que son las que se muestran acá abajo.
+
+## Resultados
+
+### Punto 1 — vecinas de una partícula
+
+Todas las partículas a escala real, la elegida en rojo y sus vecinas en azul. El anillo
+punteado está a `r_i + rc` del centro: todo lo que lo toca con su **borde** es vecina.
+
+![Vecinas de la partícula 30](images/vecinas.png)
+
+### El barrido del CIM, paso a paso
+
+Celda foco en amarillo, celdas del half-shell en celeste, y cada par medido en verde si
+cae dentro de `rc` o rojo si no. `N=40`, `L=20`, `rc=2`, `M=5`.
+
+![Animación del barrido del CIM](images/cim.gif)
+
+### Punto 3 — tiempo en función de M
+
+`L=20`, `rc=1`, paredes, 1000 búsquedas por punto (20 vueltas × 50). `M=1` es la fuerza
+bruta. El tiempo cae hasta que la curva entra en una meseta; el óptimo es `M=13`, el
+máximo que permite el criterio `L/M ≥ rc + 2·r_max`, y es unas **4x más rápido** que el
+peor `M`.
+
+![Tiempo de búsqueda en función de M](images/tiempo_vs_M.png)
+
+### Punto 4 — tiempo en función de N
+
+Con `M=13`, los dos regímenes superpuestos. A **densidad fija** (`L ∝ √N`) el CIM escala
+lineal, `t ~ N^1.01`, que es la propiedad que lo justifica; a **densidad libre** (`L=20`)
+la densidad crece con `N` y el exponente sube a `t ~ N^1.51`, porque cada celda acumula
+cada vez más partículas.
+
+![Tiempo de búsqueda en función de N](images/tiempo_vs_N.png)
 
 ## Estructura
 
@@ -145,7 +179,7 @@ Al terminar, en `figures/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
 │   ├── plot_n.py              tiempo en función de N
 │   └── bench_common.py        carga de los CSV y estadística compartida
 ├── data/                   archivos generados (fuera de git)
-├── figures/                figuras generadas (fuera de git)
+├── images/                 figuras del informe (versionadas)
 └── CMakeLists.txt
 ```
 
@@ -280,7 +314,7 @@ que es lo que usan los pasos 6 a 8 de arriba.
 
 ```bash
 ./build/CIM-TP1 -N 40 -L 20 --rc 2.0 --seed 7 -M 5 --method cim --trace data/trace.txt
-python python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps 6
+python python/animate_cim.py --trace data/trace.txt --out images/cim.gif --fps 6 --stride 5
 ```
 
 `--trace` escribe una línea por decisión del barrido (celda foco, celda del

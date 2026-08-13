@@ -24,7 +24,7 @@ MARKERS = ["o", "s", "^", "D"]
 def main():
     p = argparse.ArgumentParser(description="Tiempo en funcion de M (punto 3)")
     p.add_argument("--csv", default="data/bench_p3.csv")
-    p.add_argument("--out", default="figures/tiempo_vs_M.png")
+    p.add_argument("--out", default="images/tiempo_vs_M.png")
     p.add_argument("--show", action="store_true")
     args = p.parse_args()
 

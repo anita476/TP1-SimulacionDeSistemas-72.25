@@ -28,7 +28,7 @@ STYLE = {
 def main():
     p = argparse.ArgumentParser(description="Tiempo en funcion de N (punto 4)")
     p.add_argument("--csv", default="data/bench_p4.csv")
-    p.add_argument("--out", default="figures/tiempo_vs_N.png")
+    p.add_argument("--out", default="images/tiempo_vs_N.png")
     p.add_argument("--show", action="store_true")
     args = p.parse_args()
 
