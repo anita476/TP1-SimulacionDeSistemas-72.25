@@ -86,7 +86,7 @@ python3 python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps
 **11.** Punto 3, barrido de `M` para dos valores de `N`:
 
 ```bash
-python3 python/benchmark.py --part 3 --repeat 100 --rounds 5
+python3 python/benchmark.py --part 3 --repeat 1000
 ```
 
 **12.** Graficarlo. Imprime el `M` óptimo, que hace falta en el paso siguiente:
@@ -98,7 +98,7 @@ python3 python/plot_m.py
 **13.** Punto 4, barrido de `N` con ese `M` óptimo, en los dos regímenes de densidad:
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 --repeat 100 --rounds 5
+python3 python/benchmark.py --part 4 --M 13 --repeat 1000
 ```
 
 **14.** Graficar las dos curvas superpuestas:
@@ -272,18 +272,8 @@ python3 python/benchmark.py --part 3 && python3 python/plot_m.py
 
 Barre `M` de 1 hasta el máximo, para dos valores de `N` (uno intermedio y el más
 alto que la geometría admite), cronometrando la búsqueda `--repeat` veces por
-punto. `plot_m.py` grafica promedio ± desvío estándar e imprime el `M` óptimo.
+punto. `plot_m.py` grafica promedio con desvío estándar e imprime el `M` óptimo.
 
-`--rounds` repite el **barrido entero**, no la búsqueda dentro de cada punto. Es
-necesario: medir todos los M de corrido en una sola pasada confunde la deriva de
-la máquina (frecuencia de CPU, caché) con el valor de M. Medido, la dispersión
-entre barridos resulta **3 a 7 veces** el error estándar que reporta un solo
-barrido, y con una sola pasada el `M` óptimo se movía entre 12 y 13 de corrida en
-corrida. Con 5 vueltas queda estable en 13.
-
-Por eso `plot_m.py` decide qué valores de `M` son equivalentes usando la
-dispersión **entre vueltas**, no la de las búsquedas individuales, y además de
-un único óptimo informa el conjunto de `M` indistinguibles a 2 sigma.
 
 ```bash
 python3 python/benchmark.py --part 4 --M 13 && python3 python/plot_n.py
@@ -292,28 +282,6 @@ python3 python/benchmark.py --part 4 --M 13 && python3 python/plot_n.py
 Barre `N` con ese `M`: **densidad libre** (`L=20` fijo) y **densidad fija**
 (`L ∝ √N`), superpuestas en la misma figura.
 
-Todos los valores de `M` de un mismo `N` se miden sobre **la misma
-configuración**, leída desde disco, así la comparación es pareada y las
-diferencias son del algoritmo y no del muestreo.
-
-## Estado
-
-| Punto del enunciado | Estado |
-|---|---|
-| 1 — generación aleatoria no superpuesta | listo |
-| 1 — figura de partículas y vecinas | listo |
-| 1 — fuerza bruta | listo |
-| 1 — salida de lista de vecinas y tiempo | listo |
-| 1 — leer estático/dinámico como input | listo |
-| 1 — error si `M > L/(rc + 2·r_max)` | listo |
-| 1 — Cell Index Method (paredes y periódico) | listo |
-| 2 — demostración en vivo | animación en `figures/cim.gif` |
-| 3 — tiempo en función de M | listo |
-| 4.1 — tiempo en función de N, `L` fijo | listo |
-| 4.2 — tiempo en función de N, densidad fija | listo |
-
-Falta la infraestructura de medición que piden los puntos 3 y 4: repetir la búsqueda
-varias veces sobre la misma configuración y reportar promedio y desvío estándar.
 
 ## Bibliografía
 
