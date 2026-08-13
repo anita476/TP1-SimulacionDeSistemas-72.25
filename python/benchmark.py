@@ -66,11 +66,11 @@ def max_generable_n(L, seed, periodic):
     return lo
 
 
-def measure(inputs, M, rc, periodic, repeat, warmup, csv, seed, tag):
+def measure(inputs, M, rc, periodic, repeat, csv, seed, tag):
     static, dynamic = inputs
     args = ["--input-static", static, "--input-dynamic", dynamic, "--rc", rc,
             "--method", "cim", "-M", M, "--seed", seed, "--tag", tag,
-            "--repeat", repeat, "--warmup", warmup, "--csv", csv,
+            "--repeat", repeat, "--csv", csv,
             "--neighbors-out", f"{TMP}/n.txt"]
     if periodic:
         args.append("--periodic")
@@ -103,7 +103,7 @@ def part3(args):
     
     for N, (inputs, tag) in configs.items():
         for M in range(1, m_max + 1):
-            measure(inputs, M, rc, args.periodic, args.repeat, args.warmup, args.csv,
+            measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
                         args.seed, tag)
         print(f" N={N}", end="", flush=True)
         print()
@@ -153,7 +153,7 @@ def part4(args):
             plan.append((inputs, M_n, "densidad fija", N))
 
     for inputs, M, tag, N in plan:
-        measure(inputs, M, rc, args.periodic, args.repeat, args.warmup, args.csv,
+        measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
                 args.seed, tag)
     print(" ok")
 
@@ -166,7 +166,6 @@ def main():
     p.add_argument("--M", type=int, help="M optimo hallado en el punto 3 (requerido para --part 4)")
     p.add_argument("--rc", type=float, default=RC_DEFAULT)
     p.add_argument("--repeat", type=int, default=1000, help="busquedas cronometradas por punto")
-    p.add_argument("--warmup", type=int, default=0, help="busquedas descartadas antes de medir") 
     p.add_argument("--points", type=int, default=12, help="valores de N en el punto 4")
     p.add_argument("--periodic", action="store_true")
     p.add_argument("--seed", type=int, default=42)

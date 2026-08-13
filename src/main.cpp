@@ -35,7 +35,6 @@ int main(int argc, char* argv[]) {
     program.add_argument("--dynamic-out").help("dynamic output file").default_value(std::string("data/dynamic.txt"));
     program.add_argument("--neighbors-out").help("neighbour list output file").default_value(std::string("data/neighbors.txt"));
     program.add_argument("--repeat").help("time the search this many times").default_value(1).scan<'i', int>();
-    program.add_argument("--warmup").help("searches to run and discard first").default_value(0).scan<'i', int>();
     program.add_argument("--csv").help("append one timing row per run to this file").default_value(std::string(""));
     program.add_argument("--tag").help("label written in the first CSV column").default_value(std::string(""));
     program.add_argument("--trace").help("write a CIM sweep trace here for python/animate_cim.py").default_value(std::string(""));
@@ -165,26 +164,24 @@ int main(int argc, char* argv[]) {
         std::ostream* trace = trace_file.is_open() ? &trace_file : nullptr;
 
         const int repeat = program.get<int>("--repeat");
-        const int warmup = program.get<int>("--warmup");
-        if (repeat < 1 || warmup < 0) {
-            std::cerr << "error: --repeat must be >= 1 and --warmup >= 0\n";
+        if (repeat < 1) {
+            std::cerr << "error: --repeat must be >= 1\n";
             return 1;
         }
 
-        // The search is run repeat+warmup times and every run is timed on its
-        // own. Only the search is inside the clock.
+        // The search is run repeat times and every run is timed on its own.
+        // Only the search is inside the clock.
         NeighborLists neighbors;
         std::vector<double> times;
         times.reserve(static_cast<std::size_t>(repeat));
 
-        for (int run = 0; run < warmup + repeat; ++run) {
+        for (int run = 0; run < repeat; ++run) {
             const auto t0 = std::chrono::steady_clock::now();
             neighbors = method == "cim"
                 ? cim_neighbors(particles, L, rc, M, periodic, trace)
                 : brute_force_neighbors(particles, L, rc, periodic);
-            const double seconds = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - t0).count();
-            if (run >= warmup) times.push_back(seconds);
+            times.push_back(std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - t0).count());
         }
 
         std::size_t pairs = 0;
