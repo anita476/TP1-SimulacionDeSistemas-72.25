@@ -68,10 +68,10 @@ def main():
                     label=f"{label}\n    t ~ N^{slopes[tag][1]:.2f} para N ≥ {ns[half]}")
 
     # Both axes span several decades here, so both go logarithmic.
-    if spans_orders([n for _, n in stats]):
-        ax.set_xscale("log")
-    if spans_orders(all_times):
-        ax.set_yscale("log")
+    #if spans_orders([n for _, n in stats]):
+    #    ax.set_xscale("log")
+    #if spans_orders(all_times):
+    #    ax.set_yscale("log")
 
     sample = rows[0]
     boundary = "contorno periódico" if sample["periodic"] else "paredes"
