@@ -93,12 +93,12 @@ python3 python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps
 ```
 
 **11.** Punto 3, barrido de `M` para dos valores de `N`. Son 1000 búsquedas por punto,
-repartidas en 5 vueltas del barrido completo: la dispersión **entre vueltas** es lo que
+repartidas en 20 vueltas del barrido completo: la dispersión **entre vueltas** es lo que
 mide la incerteza real, porque las búsquedas de una misma vuelta comparten el estado de
 la máquina y subestiman el error:
 
 ```bash
-python3 python/benchmark.py --part 3 --rounds 5 --repeat 200
+python3 python/benchmark.py --part 3 --rounds 20 --repeat 50
 ```
 
 **12.** Graficarlo. Imprime el `M` óptimo, que hace falta en el paso siguiente:
@@ -110,7 +110,7 @@ python3 python/plot_m.py
 **13.** Punto 4, barrido de `N` con ese `M` óptimo, en los dos regímenes de densidad:
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 --rounds 5 --repeat 200
+python3 python/benchmark.py --part 4 --M 13 --rounds 20 --repeat 50
 ```
 
 **14.** Graficar las dos curvas superpuestas:
@@ -305,7 +305,7 @@ vecinas numeradas desde 1 en lugar de desde 0.
 ## Estudio paramétrico (puntos 3 y 4)
 
 ```bash
-python3 python/benchmark.py --part 3 --rounds 5 --repeat 200 && python3 python/plot_m.py
+python3 python/benchmark.py --part 3 --rounds 20 --repeat 50 && python3 python/plot_m.py
 ```
 
 Barre `M` de 1 hasta el máximo, para dos valores de `N` (uno intermedio y el más
@@ -313,14 +313,20 @@ alto que la geometría admite), cronometrando la búsqueda `--repeat` veces por
 punto y repitiendo el barrido entero `--rounds` veces. `plot_m.py` grafica promedio
 con desvío estándar e imprime el `M` óptimo.
 
-El `M` óptimo no sale del mínimo pelado: la cola de la curva es una meseta y cuál `M`
-gana ahí cambia de vuelta en vuelta. La decisión usa la dispersión **entre vueltas**,
-así que con `--rounds 1` no hay con qué estimarla y el criterio degenera en «el `M` más
-grande». Con `--rounds 5` la meseta sale medida: `M ∈ {9,11,12,13}` para `N=535`, y solo
-`M=13` para `N=1071`, de donde sale el `--M 13` del punto 4.
+El `M` óptimo **no** sale del mínimo pelado: la cola de la curva es una meseta y cuál
+`M` gana ahí cambia de vuelta en vuelta. La decisión usa la dispersión **entre vueltas**
+y se queda con el **mayor `M` que empata con el mínimo a 2 σ**. Con `--rounds 1` no hay
+con qué estimar esa dispersión, así que el criterio degenera en «el `M` más grande» sin
+avisar.
+
+Hacen falta bastantes vueltas para que el resultado sea estable. Con 5 vueltas, `N=535`
+daba una meseta ancha (`M ∈ {9,11,12,13}`) y el argmin caía en `M=12` **por ruido**; con
+20 vueltas la meseta se cierra en `{12,13}` y el mínimo es `M=13`, igual que para
+`N=1071`, que ahí sí es un mínimo neto sin empate. De ahí sale el `--M 13` del punto 4.
+Moraleja: hay que leer la meseta, no el argmin.
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 --rounds 5 --repeat 200 && python3 python/plot_n.py
+python3 python/benchmark.py --part 4 --M 13 --rounds 20 --repeat 50 && python3 python/plot_n.py
 ```
 
 Barre `N` con ese `M`: **densidad libre** (`L=20` fijo) y **densidad fija**

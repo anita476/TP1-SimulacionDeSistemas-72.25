@@ -58,17 +58,19 @@ def main():
                     color=COLORS[idx % len(COLORS)], capsize=3, markersize=5,
                     linewidth=1.4, label=f"N={N}")
 
-        # The minimum alone is not a defensible answer: the tail of the curve is
-        # a plateau and which M wins there flips between sweeps. The decision
-        # uses the between-sweep error, not the spread of individual searches,
-        # which would call almost everything a tie.
+        # The argmin alone is not a defensible answer: the tail of the curve is a
+        # plateau and which M wins there flips between sweeps, so the reported
+        # optimum is the largest M that ties with it. The tie uses the
+        # between-sweep error, not the spread of individual searches, which would
+        # call almost everything a tie.
         best_m = min((m for (n, m) in stats if n == N), key=lambda m: sems[(N, m)][0])
         bm, bs, sweeps = sems[(N, best_m)]
         plateau = sorted(m for (n, m) in stats if n == N
                          and abs(sems[(N, m)][0] - bm)
                          <= 2.0 * math.hypot(sems[(N, m)][1], bs))
-        optima[N] = (best_m, plateau, bm, bs, sweeps, reps)
-        ax.annotate(f"M={best_m}", (best_m, stats[(N, best_m)][0]),
+        choice = max(plateau)
+        optima[N] = (best_m, choice, plateau, bm, bs, sweeps, reps)
+        ax.annotate(f"M={choice}", (choice, stats[(N, choice)][0]),
                     textcoords="offset points", xytext=(0, -16),
                     color=COLORS[idx % len(COLORS)], ha="center", fontsize=9)
 
@@ -95,22 +97,29 @@ def main():
     print(f"figura guardada en {args.out}")
 
     print("\nM optimo por N:")
-    for N, (M, plateau, mean, sem, sweeps, reps) in sorted(optima.items()):
+    for N, (best_m, choice, plateau, mean, sem, sweeps, reps) in sorted(optima.items()):
         worst = max(stats[(N, m)][0] for (n, m) in stats if n == N)
         error = f" (+-{sem:.1e} entre vueltas)" if sweeps > 1 else ""
-        print(f"  N={N:<6} minimo en M={M:<3} t={mean:.4e} s{error}  "
-              f"{worst / mean:.1f}x mas rapido que el peor M")
+        print(f"  N={N:<6} M={choice:<3} t={stats[(N, choice)][0]:.4e} s{error}  "
+              f"{worst / stats[(N, choice)][0]:.1f}x mas rapido que el peor M")
         if sweeps < 2:
             print(f"{'':<9} una sola vuelta: sin estimacion de error, corre benchmark.py "
                   f"con --rounds > 1")
         elif len(plateau) > 1:
-            print(f"{'':<9} equivalentes al minimo a 2 sigma: M={plateau} "
+            # Saying "el minimo esta en M=12" when 12 and 13 are a coin flip is
+            # what makes this look like a result instead of noise.
+            print(f"{'':<9} meseta a 2 sigma: M={plateau} (el argmin cayo en M={best_m}, "
+                  f"pero no se distingue del resto de la meseta)")
+            print(f"{'':<9} se toma el mayor de la meseta "
+                  f"({sweeps} vueltas x {reps // sweeps} busquedas)")
+        else:
+            print(f"{'':<9} minimo neto, sin empate a 2 sigma "
                   f"({sweeps} vueltas x {reps // sweeps} busquedas)")
 
     # Recommend the largest M that is inside every N's plateau: on the plateau
     # they cost the same, and the criterion caps M anyway.
-    common = set.intersection(*(set(v[1]) for v in optima.values()))
-    choice = max(common) if common else max(v[0] for v in optima.values())
+    common = set.intersection(*(set(v[2]) for v in optima.values()))
+    choice = max(common) if common else max(v[1] for v in optima.values())
     print(f"\n-> usar --M {choice} en el punto 4")
 
     if args.show:
