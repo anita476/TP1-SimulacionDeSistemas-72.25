@@ -67,6 +67,15 @@ Puede utilizarse la versión interactiva. Hacer clic para seleccionar una partí
 python3 python/compare_neighbors.py data/nb_brute.txt data/nb_cim.txt
 ```
 
+**8.bis** La validación que pide la cátedra: que **todo** `M > 1` dé exactamente las
+mismas vecinas que la fuerza bruta (`M=1`), partícula por partícula, sin importar el
+orden dentro de cada línea. Barre `M` de 1 al máximo, con paredes y con contorno
+periódico, sobre varias configuraciones. Tiene que terminar en `VALIDACION OK`:
+
+```bash
+python3 python/validate_m.py -N 1000 --seeds 1 2 3
+```
+
 **9.** Comprobar que un `M` mayor al máximo da error (exit code 1):
 
 ```bash
@@ -83,10 +92,13 @@ python3 python/compare_neighbors.py data/nb_brute.txt data/nb_cim.txt
 python3 python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps 6
 ```
 
-**11.** Punto 3, barrido de `M` para dos valores de `N`:
+**11.** Punto 3, barrido de `M` para dos valores de `N`. Son 1000 búsquedas por punto,
+repartidas en 5 vueltas del barrido completo: la dispersión **entre vueltas** es lo que
+mide la incerteza real, porque las búsquedas de una misma vuelta comparten el estado de
+la máquina y subestiman el error:
 
 ```bash
-python3 python/benchmark.py --part 3 --repeat 1000
+python3 python/benchmark.py --part 3 --rounds 5 --repeat 200
 ```
 
 **12.** Graficarlo. Imprime el `M` óptimo, que hace falta en el paso siguiente:
@@ -98,7 +110,7 @@ python3 python/plot_m.py
 **13.** Punto 4, barrido de `N` con ese `M` óptimo, en los dos regímenes de densidad:
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 --repeat 1000
+python3 python/benchmark.py --part 4 --M 13 --rounds 5 --repeat 200
 ```
 
 **14.** Graficar las dos curvas superpuestas:
@@ -126,7 +138,8 @@ Al terminar, en `figures/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
 │   ├── requirements.txt
 │   ├── visualize.py           figura de partículas y vecinas
 │   ├── animate_cim.py         animación paso a paso del barrido del CIM
-│   ├── compare_neighbors.py   valida el CIM contra la fuerza bruta
+│   ├── compare_neighbors.py   compara dos listas de vecinas ya generadas
+│   ├── validate_m.py          barre M de 1 al máximo contra la fuerza bruta
 │   ├── benchmark.py           barridos de M y de N (puntos 3 y 4)
 │   ├── plot_m.py              tiempo en función de M
 │   ├── plot_n.py              tiempo en función de N
@@ -238,6 +251,31 @@ SE (+1, -1)   E (+1, 0)   NE (+1, +1)   N (0, +1)
 Es el *half-shell*, y es exactamente el conjunto que se muestra en clase y en Allen &
 Tildesley p. 152.
 
+**Excepción, `M < 3` con contorno periódico.** Ahí la grilla es tan chica que el
+half-shell se muerde la cola: con `M=2`, los desplazamientos `(+1,+1)` y `(+1,-1)`
+caen en la **misma** celda módulo 2, así que el mismo par se mediría dos veces y
+quedarían vecinas repetidas. Con esa grilla toda celda es vecina de toda celda, o sea
+que el barrido degenera en medir todos los pares igual, de modo que el programa usa
+directamente la fuerza bruta y lo avisa por `stderr`. El resultado es el mismo; lo que
+cambia es que esos dos puntos del punto 3 no miden el CIM.
+
+## Validación contra la fuerza bruta
+
+```bash
+python3 python/validate_m.py -N 1000 --seeds 1 2 3
+```
+
+Genera una configuración, calcula la lista de referencia con `--method brute` y después
+corre el CIM con **cada** `M` de 1 al máximo sobre esos mismos archivos. Para cada `M`
+compara conjunto contra conjunto, así que el orden dentro de cada línea no importa, y
+además verifica que no haya vecinas repetidas, ni auto-vecindad, ni pares asimétricos
+(`j ∈ vecinas(i)` ⟺ `i ∈ vecinas(j)`). Cierra comprobando que `M = m_max + 1` es
+rechazado. Corre paredes y contorno periódico salvo que se pase `--periodic` o
+`--walls`.
+
+`compare_neighbors.py` hace la misma comparación pero entre dos archivos ya generados,
+que es lo que usan los pasos 6 a 8 de arriba.
+
 ## Animar el barrido
 
 ```bash
@@ -267,20 +305,32 @@ vecinas numeradas desde 1 en lugar de desde 0.
 ## Estudio paramétrico (puntos 3 y 4)
 
 ```bash
-python3 python/benchmark.py --part 3 && python3 python/plot_m.py
+python3 python/benchmark.py --part 3 --rounds 5 --repeat 200 && python3 python/plot_m.py
 ```
 
 Barre `M` de 1 hasta el máximo, para dos valores de `N` (uno intermedio y el más
 alto que la geometría admite), cronometrando la búsqueda `--repeat` veces por
-punto. `plot_m.py` grafica promedio con desvío estándar e imprime el `M` óptimo.
+punto y repitiendo el barrido entero `--rounds` veces. `plot_m.py` grafica promedio
+con desvío estándar e imprime el `M` óptimo.
 
+El `M` óptimo no sale del mínimo pelado: la cola de la curva es una meseta y cuál `M`
+gana ahí cambia de vuelta en vuelta. La decisión usa la dispersión **entre vueltas**,
+así que con `--rounds 1` no hay con qué estimarla y el criterio degenera en «el `M` más
+grande». Con `--rounds 5` la meseta sale medida: `M ∈ {9,11,12,13}` para `N=535`, y solo
+`M=13` para `N=1071`, de donde sale el `--M 13` del punto 4.
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 && python3 python/plot_n.py
+python3 python/benchmark.py --part 4 --M 13 --rounds 5 --repeat 200 && python3 python/plot_n.py
 ```
 
 Barre `N` con ese `M`: **densidad libre** (`L=20` fijo) y **densidad fija**
-(`L ∝ √N`), superpuestas en la misma figura.
+(`L ∝ √N`), superpuestas en la misma figura. En la curva de densidad fija `L` crece,
+y lo que se mantiene es el **tamaño de celda** óptimo (`M_n ≈ M·L_n/L`), no el número
+`M`: dejar `M=13` con `L=58` daría celdas de 4.5 y el barrido dejaría de ser el que se
+optimizó en el punto 3.
+
+Ambos ejes van en escala logarítmica cuando los datos abarcan dos órdenes de magnitud
+o más, que es el caso de las dos figuras.
 
 
 ## Bibliografía

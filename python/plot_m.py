@@ -72,10 +72,7 @@ def main():
                     textcoords="offset points", xytext=(0, -16),
                     color=COLORS[idx % len(COLORS)], ha="center", fontsize=9)
 
-    """
-    if spans_orders(all_times):
-        ax.set_yscale("log")
-    """
+    # The M=1 end is the brute force, an order of magnitude above the plateau.
     ax.set_yscale("log")
 
     if spans_orders([m for _, m in stats]):

@@ -89,21 +89,21 @@ def minimum_image(d, box, periodic):
 
 
 def neighbours_by_distance(target, positions, radii, box, periodic, rc):
-    """Neighbour ids whose centre falls within radii[target] + rc of the target.
+    """Neighbour ids whose border-to-border distance to the target is below rc.
 
-    Same criterion the dashed ring in the figure represents. Used in
-    interactive mode when no --neighbors file was given, so a click still
-    produces something to look at as long as --rc is set.
+    Mirrors within_cutoff() in C++, radii of both discs included and the
+    comparison strict, so a click reproduces exactly what the simulator writes.
+    Used in interactive mode when no --neighbors file was given.
     """
     tx, ty = positions[target]
-    limit = radii[target] + rc
     found = []
     for j, (px, py) in enumerate(positions):
         if j == target:
             continue
         dx = minimum_image(px - tx, box, periodic)
         dy = minimum_image(py - ty, box, periodic)
-        if dx * dx + dy * dy <= limit * limit:
+        limit = radii[target] + radii[j] + rc
+        if dx * dx + dy * dy < limit * limit:
             found.append(j)
     return found
 

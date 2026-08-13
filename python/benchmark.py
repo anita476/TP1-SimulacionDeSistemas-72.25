@@ -100,15 +100,16 @@ def part3(args):
             continue
         configs[N] = (inputs, "intermedio" if N == n_mid else "maximo")
 
-    
-    for N, (inputs, tag) in configs.items():
-        for M in range(1, m_max + 1):
-            measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
+    # Each round sweeps every point once, so the scatter between rounds measures
+    # what the machine was doing; plot_m.py needs more than one to size its bars.
+    for round_i in range(args.rounds):
+        for N, (inputs, tag) in configs.items():
+            for M in range(1, m_max + 1):
+                measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
                         args.seed, tag)
-        print(f" N={N}", end="", flush=True)
-        print()
+            print(f" vuelta {round_i + 1}/{args.rounds} N={N}", flush=True)
 
-    print(f"\n-> {args.csv} , {args.repeat} busquedas por punto)")
+    print(f"\n-> {args.csv} ({args.rounds} vueltas x {args.repeat} busquedas por punto)")
 
 
 def part4(args):
@@ -152,12 +153,13 @@ def part4(args):
         if inputs is not None:
             plan.append((inputs, M_n, "densidad fija", N))
 
-    for inputs, M, tag, N in plan:
-        measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
-                args.seed, tag)
-    print(" ok")
+    for round_i in range(args.rounds):
+        for inputs, M, tag, N in plan:
+            measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
+                    args.seed, tag)
+        print(f" vuelta {round_i + 1}/{args.rounds}", flush=True)
 
-    print(f"\n-> {args.csv} , {args.repeat} busquedas por punto)")
+    print(f"\n-> {args.csv} ({args.rounds} vueltas x {args.repeat} busquedas por punto)")
 
 
 def main():
@@ -166,6 +168,9 @@ def main():
     p.add_argument("--M", type=int, help="M optimo hallado en el punto 3 (requerido para --part 4)")
     p.add_argument("--rc", type=float, default=RC_DEFAULT)
     p.add_argument("--repeat", type=int, default=1000, help="busquedas cronometradas por punto")
+    p.add_argument("--rounds", type=int, default=1,
+                   help="veces que se repite el barrido completo; >1 habilita la "
+                        "barra de error entre vueltas de plot_m.py")
     p.add_argument("--points", type=int, default=12, help="valores de N en el punto 4")
     p.add_argument("--periodic", action="store_true")
     p.add_argument("--seed", type=int, default=42)
