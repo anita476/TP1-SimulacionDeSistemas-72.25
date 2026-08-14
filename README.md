@@ -85,6 +85,15 @@ no pisar la configuración con paredes, que los pasos 6 a 8 vuelven a usar:
 ```bash
 python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors.txt --out images/vecinas.png
 ```
+**5.bis** La misma figura con contorno periódico. La partícula 591 cae en una esquina, así
+que sus vecinas quedan repartidas en las **cuatro esquinas** de la caja. Hay que pasarle
+los tres archivos periódicos: si se dejan los defaults, se mezclan posiciones con paredes
+y lista de vecinas periódica.
+
+```bash
+python3 python/visualize.py --static data/static_pbc.txt --dynamic data/dynamic_pbc.txt --neighbors data/neighbors_pbc.txt --particle 591 --rc 1.0 --periodic --out images/vecinas_pbc.png
+```
+
 Puede utilizarse la versión interactiva. Hacer clic para seleccionar una partícula o utilizar **n,p**.
 
 ```bash
@@ -92,15 +101,7 @@ python3 python/visualize.py --particle 30 --rc 1.0 --periodic --interactive --st
 ```
 
 > `--periodic` dibuja las réplicas por wrap-around, que es lo que hace legible el caso
-> con contorno periódico.
->
-> **Los tres archivos van juntos.** `--static` y `--dynamic` apuntan por defecto a la
-> configuración con paredes, así que pasar sólo `--neighbors data/neighbors_pbc.txt`
-> dibuja las posiciones del paso 3 con las vecinas del paso 4. No son la misma
-> configuración: el generador rechaza por solapamiento **a través del borde** cuando se
-> le pide `--periodic`, así que con la misma semilla acepta otras partículas (las 1000
-> posiciones y 768 de los 1000 radios difieren). Lo que se ve entonces es una partícula
-> unida a "vecinas" que están a 15 unidades en una caja de lado 20.
+> con contorno periódico. Los tres archivos van juntos, por lo mismo que en el paso 5.bis.
 
 **6.** Correr la fuerza bruta sobre **la misma** configuración, leyéndola de disco:
 
@@ -157,6 +158,17 @@ python3 python/validate_m.py -N 1000 --seeds 1 2 3
 
 ```bash
 python3 python/animate_cim.py --trace data/trace.txt --out images/cim.gif --fps 6 --stride 5
+```
+
+**10.bis** Lo mismo con contorno periódico. Sirve para ver que ahí el half-shell **nunca
+descarta celdas**: las que se salen por un borde reaparecen por el opuesto.
+
+```bash
+./build/CIM-TP1 -N 40 -L 20 --rc 2.0 --seed 7 -M 5 --method cim --periodic --trace data/trace_pbc.txt
+```
+
+```bash
+python3 python/animate_cim.py --trace data/trace_pbc.txt --out images/cim_pbc.gif --fps 6 --stride 5
 ```
 
 **11.** Punto 3, barrido de `M` para dos valores de `N`, con 1000 búsquedas

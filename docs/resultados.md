@@ -9,6 +9,12 @@ punteado está a `r_i + rc` del centro: todo lo que lo toca con su **borde** es 
 
 ![Vecinas de la partícula 30](../images/vecinas.png)
 
+La misma figura con contorno periódico. La partícula 591 cae en una esquina, así que
+sus vecinas quedan repartidas en las **cuatro esquinas** de la caja: la interacción
+cruza el borde por imagen mínima.
+
+![Vecinas con contorno periódico](../images/vecinas_pbc.png)
+
 ## El barrido del CIM, paso a paso
 
 Celda foco en amarillo, celdas del half-shell en celeste, y cada par medido en verde si
@@ -21,6 +27,11 @@ foco que está una fila más arriba y una columna más atrás. Recién ahí qued
 por eso el gris va una fila atrás del foco.
 
 ![Animación del barrido del CIM](../images/cim.gif)
+
+El mismo barrido con contorno periódico muestra que ahí el half-shell **nunca descarta
+celdas**: las que se salen por un borde reaparecen por el opuesto.
+
+![Animación del barrido con contorno periódico](../images/cim_pbc.gif)
 
 ## Punto 3 — tiempo en función de M
 
