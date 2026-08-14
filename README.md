@@ -41,13 +41,20 @@ no pisar la configuración con paredes, que los pasos 6 a 8 vuelven a usar:
 ```bash
 python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors.txt --out images/vecinas.png
 ```
+**5.bis** La misma figura con contorno periódico. La partícula 591 cae en una esquina, así
+que sus vecinas quedan repartidas en las **cuatro esquinas** de la caja. Hay que pasarle
+los tres archivos periódicos: si se dejan los defaults, se mezclan posiciones con paredes
+y lista de vecinas periódica.
+
+```bash
+python3 python/visualize.py --static data/static_pbc.txt --dynamic data/dynamic_pbc.txt --neighbors data/neighbors_pbc.txt --particle 591 --rc 1.0 --periodic --out images/vecinas_pbc.png
+```
+
 Puede utilizarse la versión interactiva. Hacer clic para seleccionar una partícula o utilizar **n,p**.
 
 ```bash
- python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors_pbc.txt --interactive --periodic
+python3 python/visualize.py --static data/static_pbc.txt --dynamic data/dynamic_pbc.txt --neighbors data/neighbors_pbc.txt --particle 591 --rc 1.0 --periodic --interactive
 ```
-
->`--periodic` sirve para visualizar el caso con condiciones de contorno de mejor manera)
 
 **6.** Correr la fuerza bruta sobre **la misma** configuración, leyéndola de disco:
 
@@ -92,6 +99,17 @@ python3 python/validate_m.py -N 1000 --seeds 1 2 3
 python3 python/animate_cim.py --trace data/trace.txt --out images/cim.gif --fps 6 --stride 5
 ```
 
+**10.bis** Lo mismo con contorno periódico. Sirve para ver que ahí el half-shell **nunca
+descarta celdas**: las que se salen por un borde reaparecen por el opuesto.
+
+```bash
+./build/CIM-TP1 -N 40 -L 20 --rc 2.0 --seed 7 -M 5 --method cim --periodic --trace data/trace_pbc.txt
+```
+
+```bash
+python3 python/animate_cim.py --trace data/trace_pbc.txt --out images/cim_pbc.gif --fps 6 --stride 5
+```
+
 **11.** Punto 3, barrido de `M` para dos valores de `N`. Son 1000 búsquedas por punto,
 repartidas en 20 vueltas del barrido completo: la dispersión **entre vueltas** es lo que
 mide la incerteza real, porque las búsquedas de una misma vuelta comparten el estado de
@@ -131,12 +149,31 @@ punteado está a `r_i + rc` del centro: todo lo que lo toca con su **borde** es 
 
 ![Vecinas de la partícula 30](images/vecinas.png)
 
+### Punto 1 — vecinas con contorno periódico
+
+La misma idea sobre el toroide. La partícula 591 está en la esquina superior derecha y
+tiene 15 vecinas, **11 de ellas a través del borde**: aparecen en las otras tres esquinas
+de la caja, porque para el sistema periódico las cuatro esquinas son el mismo lugar.
+
+Los discos claros alrededor de la elegida son las **imágenes mínimas**: dónde cae cada
+vecina cuando se la trae por el camino corto, que es la distancia que realmente se mide.
+
+![Vecinas de la partícula 591 con contorno periódico](images/vecinas_pbc.png)
+
 ### El barrido del CIM, paso a paso
 
 Celda foco en amarillo, celdas del half-shell en celeste, y cada par medido en verde si
 cae dentro de `rc` o rojo si no. `N=40`, `L=20`, `rc=2`, `M=5`.
 
 ![Animación del barrido del CIM](images/cim.gif)
+
+### El barrido con contorno periódico
+
+Mismos parámetros, pero sobre el toroide. La diferencia se ve en las celdas del borde:
+con paredes el half-shell descarta las vecinas que caen fuera de la grilla, mientras que
+acá **las cuatro se abren siempre**, envolviendo hacia el lado opuesto.
+
+![Animación del barrido del CIM con contorno periódico](images/cim_pbc.gif)
 
 ### Punto 3 — tiempo en función de M
 
