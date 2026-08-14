@@ -113,12 +113,21 @@ def validate(args, seed, tmp):
 
     print(f"  {label} | M de 1 a {m_max} | {pairs} pares de referencia")
 
+
+    ok = True
+    for method in args.methods:
+        ok &= sweep_method(args, cfg, method, m_max, reference, tmp)
+    return ok
+
+
+def sweep_method(args, cfg, method, m_max, reference, tmp):
+    """Sweeps M from 1 to m_max for one cell structure. True when all agree."""
     ok = True
     for M in range(1, m_max + 1):
-        got_path = os.path.join(tmp, f"cim_{M}.txt")
-        result = run(cfg + ["--method", "cim", "-M", M, "--neighbors-out", got_path])
+        got_path = os.path.join(tmp, f"{method}_{M}.txt")
+        result = run(cfg + ["--method", method, "-M", M, "--neighbors-out", got_path])
         if result.returncode != 0:
-            print(f"    M={M:<3} ERROR (exit {result.returncode}): "
+            print(f"    [{method}] M={M:<3} ERROR (exit {result.returncode}): "
                   f"{result.stderr.strip().splitlines()[-1]}")
             ok = False
             continue
@@ -126,24 +135,24 @@ def validate(args, seed, tmp):
         problems = check(reference, load(got_path), M)
         if problems:
             ok = False
-            print(f"    M={M:<3} DIFIERE ({len(problems)} problemas)")
+            print(f"    [{method}] M={M:<3} DIFIERE ({len(problems)} problemas)")
             for line in problems[:args.max_report]:
                 print("          -", line)
             if len(problems) > args.max_report:
                 print(f"          ... y {len(problems) - args.max_report} mas")
         elif args.verbose:
-            print(f"    M={M:<3} identica a fuerza bruta")
+            print(f"    [{method}] M={M:<3} identica a fuerza bruta")
 
     # The assignment asks for an error past the maximum, not a silently wrong list.
-    result = run(cfg + ["--method", "cim", "-M", m_max + 1,
+    result = run(cfg + ["--method", method, "-M", m_max + 1,
                         "--neighbors-out", os.path.join(tmp, "over.txt")])
     if result.returncode == 0:
-        print(f"    M={m_max + 1:<3} DEBIO FALLAR: supera el maximo y fue aceptado")
+        print(f"    [{method}] M={m_max + 1:<3} DEBIO FALLAR: supera el maximo y fue aceptado")
         ok = False
     elif args.verbose:
-        print(f"    M={m_max + 1:<3} rechazado, como corresponde")
+        print(f"    [{method}] M={m_max + 1:<3} rechazado, como corresponde")
 
-    print(f"    -> {'TODOS LOS M COINCIDEN' if ok else 'HAY DIFERENCIAS'}")
+    print(f"    -> [{method}] {'TODOS LOS M COINCIDEN' if ok else 'HAY DIFERENCIAS'}")
     return ok
 
 
@@ -161,6 +170,9 @@ def main():
                    help="solo contorno periodico (por defecto corre los dos)")
     p.add_argument("--walls", action="store_true",
                    help="solo paredes (por defecto corre los dos)")
+    p.add_argument("--methods", nargs="+", default=["cim", "cim-ll"],
+                   choices=["cim", "cim-ll"],
+                   help="estructuras de celdas a validar (por defecto las dos)")
     p.add_argument("--max-report", type=int, default=5)
     p.add_argument("--verbose", action="store_true", help="una linea por cada M")
     args = p.parse_args()
@@ -184,8 +196,8 @@ def main():
             for seed in args.seeds:
                 ok &= validate(args, seed, tmp)
 
-    print("\nVALIDACION OK: el CIM da las mismas vecinas que la fuerza bruta para todo M"
-          if ok else "\nVALIDACION FALLIDA")
+    print(f"\nVALIDACION OK: {', '.join(args.methods)} dan las mismas vecinas que la "
+          f"fuerza bruta para todo M" if ok else "\nVALIDACION FALLIDA")
     sys.exit(0 if ok else 1)
 
 

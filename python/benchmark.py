@@ -66,19 +66,41 @@ def max_generable_n(L, seed, periodic):
     return lo
 
 
-def measure(inputs, M, rc, periodic, repeat, csv, seed, tag):
+def measure(inputs, M, rc, periodic, repeat, csv, seed, tag, method):
     static, dynamic = inputs
     args = ["--input-static", static, "--input-dynamic", dynamic, "--rc", rc,
-            "--method", "cim", "-M", M, "--seed", seed, "--tag", tag,
+            "--method", method, "-M", M, "--seed", seed, "--tag", tag,
             "--repeat", repeat, "--csv", csv,
             "--neighbors-out", f"{TMP}/n.txt"]
     if periodic:
         args.append("--periodic")
     result = run(args)
     if result.returncode != 0:
-        print(f"    M={M}: FALLO -> {result.stderr.strip().splitlines()[-1]}")
+        print(f"    {method} M={M}: FALLO -> {result.stderr.strip().splitlines()[-1]}")
         return False
     return True
+
+
+def parse_optimal_m(values, methods):
+    """Reads --M, either '13' for every method or 'cim=13 cim-ll=12'.
+
+    Point 3 can give each cell structure a different optimum, so point 4 takes
+    one per method.
+    """
+    out = {}
+    for item in values:
+        if "=" in item:
+            name, _, number = item.partition("=")
+            if name not in methods:
+                sys.exit(f"--M menciona '{name}', que no esta en --methods {methods}")
+            out[name] = int(number)
+        else:
+            for name in methods:
+                out.setdefault(name, int(item))
+    missing = [m for m in methods if m not in out]
+    if missing:
+        sys.exit(f"--M no dice nada de {missing}")
+    return out
 
 
 def part3(args):
@@ -100,16 +122,14 @@ def part3(args):
             continue
         configs[N] = (inputs, "intermedio" if N == n_mid else "maximo")
 
-    # Each round sweeps every point once, so the scatter between rounds measures
-    # what the machine was doing; plot_m.py needs more than one to size its bars.
-    for round_i in range(args.rounds):
-        for N, (inputs, tag) in configs.items():
-            for M in range(1, m_max + 1):
+    for N, (inputs, tag) in configs.items():
+        for M in range(1, m_max + 1):
+            for method in args.methods:
                 measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
-                        args.seed, tag)
-            print(f" vuelta {round_i + 1}/{args.rounds} N={N}", flush=True)
+                        args.seed, tag, method)
+        print(f" N={N} listo", flush=True)
 
-    print(f"\n-> {args.csv} ({args.rounds} vueltas x {args.repeat} busquedas por punto)")
+    print(f"\n-> {args.csv} ({args.repeat} busquedas por punto)")
 
 
 def part4(args):
@@ -126,51 +146,67 @@ def part4(args):
     n_ref = values[len(values) // 2]
     density = n_ref / (L * L)
 
-    print(f"L={L} rc={rc} | N maximo = {n_max} | M optimo = {args.M}")
+    optimal = parse_optimal_m(args.M, args.methods)
+
+    print(f"L={L} rc={rc} | N maximo = {n_max}")
+    print("M optimo: " + ", ".join(f"{k}={v}" for k, v in optimal.items()))
+
+    # Cada estructura corriendo en SU mejor M es lo correcto para el punto 4, que
+    # pregunta por el tiempo contra N. Pero si los dos M no coinciden, las dos
+    # curvas de tiempo_vs_N.png dejan de ser una comparacion limpia entre
+    # estructuras: parte de la diferencia pasa a ser la resolucion de la grilla.
+    # En las corridas hechas hasta ahora el optimo de las dos cae en el mismo M
+    # (el maximo que permite el criterio), asi que este aviso no deberia aparecer.
+    if len(set(optimal.values())) > 1:
+        print("AVISO: las estructuras corren en M distintos "
+              + ", ".join(f"{k}={v}" for k, v in optimal.items()) + ".")
+        print("       La razon entre sus tiempos mezcla estructura con resolucion de")
+        print("       grilla; para compararlas entre si, corre tambien con un M comun.")
     print(f"4.1 densidad libre (L={L} fijo)")
     print(f"4.2 densidad fija = {density:.4f} part/area (referencia N={n_ref})")
     if os.path.exists(args.csv):
         os.remove(args.csv)
 
     m_max_fixed_L = cim_max_grid_side(L, rc)
-    if args.M > m_max_fixed_L:
-        sys.exit(f"M={args.M} supera el maximo {m_max_fixed_L} para L={L}")
+    for method, M in optimal.items():
+        if M > m_max_fixed_L:
+            sys.exit(f"M={M} ({method}) supera el maximo {m_max_fixed_L} para L={L}")
 
-    # Both curves are generated once and then swept repeatedly, for the same
-    # reason as in point 3: a point measured in its own contiguous burst carries
-    # whatever the machine was doing at that moment.
-    plan = []
+    # Each structure runs at ITS optimal M, which need not be the same one: at a
+    # shared M one of them would be off its own best grid.
     for N in values:
-        inputs = generate(N, L, args.seed, args.periodic, f"a{N}")
-        if inputs is not None:
-            plan.append((inputs, args.M, "densidad libre", N))
-
+        free = generate(N, L, args.seed, args.periodic, f"a{N}")
         L_n = math.sqrt(N / density)
-        # Keeping the cell size fixed is what "the same M" means once L moves;
-        # the criterion still caps it.
-        M_n = min(cim_max_grid_side(L_n, rc), max(1, round(args.M * L_n / L)))
-        inputs = generate(N, round(L_n, 6), args.seed, args.periodic, f"b{N}")
-        if inputs is not None:
-            plan.append((inputs, M_n, "densidad fija", N))
+        fixed = generate(N, round(L_n, 6), args.seed, args.periodic, f"b{N}")
 
-    for round_i in range(args.rounds):
-        for inputs, M, tag, N in plan:
-            measure(inputs, M, rc, args.periodic, args.repeat, args.csv,
-                    args.seed, tag)
-        print(f" vuelta {round_i + 1}/{args.rounds}", flush=True)
+        for method in args.methods:
+            M = optimal[method]
+            if free is not None:
+                measure(free, M, rc, args.periodic, args.repeat, args.csv,
+                        args.seed, "densidad libre", method)
+            # Keeping the cell size fixed is what "the same M" means once L moves;
+            # the criterion still caps it.
+            M_n = min(cim_max_grid_side(L_n, rc), max(1, round(M * L_n / L)))
+            if fixed is not None:
+                measure(fixed, M_n, rc, args.periodic, args.repeat, args.csv,
+                        args.seed, "densidad fija", method)
+        print(f" N={N} listo", flush=True)
 
-    print(f"\n-> {args.csv} ({args.rounds} vueltas x {args.repeat} busquedas por punto)")
+    print(f"\n-> {args.csv} ({args.repeat} busquedas por punto)")
 
 
 def main():
     p = argparse.ArgumentParser(description="Barridos parametricos del TP1")
     p.add_argument("--part", type=int, choices=(3, 4), required=True)
-    p.add_argument("--M", type=int, help="M optimo hallado en el punto 3 (requerido para --part 4)")
+    p.add_argument("--M", nargs="+",
+                   help="M optimo del punto 3 (requerido para --part 4). Un solo "
+                        "numero vale para todos los metodos, o uno por metodo: "
+                        "--M cim=13 cim-ll=12")
+    p.add_argument("--methods", nargs="+", default=["cim", "cim-ll"],
+                   choices=["cim", "cim-ll"],
+                   help="estructuras de celdas a medir (por defecto las dos)")
     p.add_argument("--rc", type=float, default=RC_DEFAULT)
     p.add_argument("--repeat", type=int, default=1000, help="busquedas cronometradas por punto")
-    p.add_argument("--rounds", type=int, default=1,
-                   help="veces que se repite el barrido completo; >1 habilita la "
-                        "barra de error entre vueltas de plot_m.py")
     p.add_argument("--points", type=int, default=12, help="valores de N en el punto 4")
     p.add_argument("--periodic", action="store_true")
     p.add_argument("--seed", type=int, default=42)

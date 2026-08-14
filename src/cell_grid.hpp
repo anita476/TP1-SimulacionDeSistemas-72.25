@@ -11,7 +11,10 @@
 // queries); only the chosen M differs.
 class CellGrid {
 public:
-    CellGrid(double L, int M)
+    // The particle count is accepted but unused: it is there so this class and
+    // LinkedCellGrid, which does need it to size its LIST array, can be built
+    // from the same expression by the templated sweep in neighbors.cpp.
+    CellGrid(double L, int M, int /*n*/ = 0)
         : L_(L), M_(M), cells_(static_cast<std::size_t>(M) * static_cast<std::size_t>(M)) {}
 
     int side() const { return M_; }
@@ -38,6 +41,27 @@ public:
 
     void clear() {
         for (std::vector<int>& c : cells_) c.clear();
+    }
+
+    // M*M vector headers (24 B each on libc++) plus what each cell reserved.
+    // capacity() and not size(), because the doubling leaves reserved slack.
+    std::size_t memory_bytes() const {
+        std::size_t bytes = cells_.capacity() * sizeof(std::vector<int>);
+        for (const std::vector<int>& c : cells_) bytes += c.capacity() * sizeof(int);
+        return bytes;
+    }
+
+    // Blocks the structure is HOLDING once it is built: one for the outer array
+    // and one per non-empty cell. Not the number of requests the allocator saw
+    // while building it, which is higher: each cell grows by doubling, so a cell
+    // that ends with 6 particles asked four times (1, 2, 4, 8) and freed three.
+    // Counted this way to pair with memory_bytes(), which is also what is held.
+    std::size_t live_blocks() const {
+        std::size_t count = cells_.capacity() > 0 ? 1 : 0;
+        for (const std::vector<int>& c : cells_) {
+            if (c.capacity() > 0) ++count;
+        }
+        return count;
     }
 
 private:

@@ -21,4 +21,4 @@ void write_neighbors(const std::string& path, const NeighborLists& neighbors);
 
 void append_timings(const std::string& path, const std::string& tag, const std::string& method,
                     int N, double L, int M, double rc, bool periodic, const std::string& seed,
-                    const std::vector<double>& seconds);
+                    const std::vector<double>& seconds, const std::vector<CimStats>& stats);

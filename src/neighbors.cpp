@@ -1,11 +1,13 @@
 #include "neighbors.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 
 #include "cell_grid.hpp"
 #include "geometry.hpp"
+#include "linked_cell_grid.hpp"
 
 
 int cim_max_grid_side(double L, double rc, double r_max)
@@ -58,17 +60,23 @@ NeighborLists brute_force_neighbors(const std::vector<Particle> &particles,
 constexpr int kHalfShellCount = 4;
 constexpr int kHalfShell[kHalfShellCount][2] = {{+1, -1}, {+1, 0}, {+1, +1}, {0, +1}};
 
-template <bool Trace>
+
+template <class Grid, bool Trace, bool Count>
 NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double rc, int M,
-                        bool periodic, std::ostream *trace)
+                        bool periodic, std::ostream *trace, CimStats *stats)
 {
+    using Clock = std::chrono::steady_clock;
+
     const int n = static_cast<int>(particles.size());
     NeighborLists neighbors(n);
-    CellGrid grid(L, M);
+
+    const auto t_build = Clock::now();
+    Grid grid(L, M, n);
     // identify exact cell of particles
     for (int i = 0; i < n; ++i) {
         grid.insert(i, particles[i].x, particles[i].y);
     }
+    const auto t_built = Clock::now();
 
     // for tracing
     if constexpr (Trace) {
@@ -80,7 +88,7 @@ NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double
         }
         for (int cy = 0; cy < M; ++cy) {
             for (int cx = 0; cx < M; ++cx) {
-                const std::vector<int> &ids = grid.cell(grid.cell_index(cx, cy));
+                const auto &ids = grid.cell(grid.cell_index(cx, cy));
                 if (ids.empty()) continue;
                 *trace << "CELL " << cx << ' ' << cy;
                 for (int id : ids) *trace << ' ' << id;
@@ -89,7 +97,10 @@ NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double
         }
     }
 
+    std::size_t pair_tests = 0;
+
     auto test_pair = [&](int a, int b, [[maybe_unused]] const char *tag) {
+        if constexpr (Count) ++pair_tests;
         const bool hit = within_cutoff(particles[a], particles[b], rc, L, periodic);
         if (hit) {
             neighbors[a].push_back(b);
@@ -98,19 +109,25 @@ NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double
         if constexpr (Trace) *trace << tag << ' ' << a << ' ' << b << ' ' << (hit ? 1 : 0) << '\n';
     };
 
+    // The trace preamble above dumps the whole grid to a stream, so the sweep
+    // clock starts here, after it, and not when the build clock stopped.
+    const auto t_sweep = Clock::now();
+
     for (int cy = 0; cy < M; ++cy) {
         for (int cx = 0; cx < M; ++cx) {
-            const std::vector<int> &ids = grid.cell(grid.cell_index(cx, cy));
-            const int n_cell = static_cast<int>(ids.size());
+            const auto &ids = grid.cell(grid.cell_index(cx, cy));
 
-            if (n_cell == 0) continue;
+            if (ids.empty()) continue;
 
             if constexpr (Trace) *trace << "FOCUS " << cx << ' ' << cy << '\n';
 
-            // own cell
-            for (int i = 0; i < n_cell; ++i) {
-                for (int j = i + 1; j < n_cell; ++j) {
-                    test_pair(ids[i], ids[j], "SELF");
+            // own cell: every unordered pair once. Starting from the successor
+            // of `it` is the "i < j" of before, now that a cell may be a chain
+            // with no indices to compare.
+            for (auto it = ids.begin(); it != ids.end(); ++it) {
+                auto jt = it;
+                for (++jt; jt != ids.end(); ++jt) {
+                    test_pair(*it, *jt, "SELF");
                 }
             }
 
@@ -128,25 +145,41 @@ NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double
                     continue; // a wall
                 }
                 // grab neighbor bucket
-                const std::vector<int> &nids = grid.cell(grid.cell_index(nx, ny));
-                const int nn_cell = static_cast<int>(nids.size());
+                const auto &nids = grid.cell(grid.cell_index(nx, ny));
 
                 if constexpr (Trace) *trace << "SHELL " << nx << ' ' << ny << '\n';
 
-                for (int i = 0; i < n_cell; ++i) {
-                    for (int j = 0; j < nn_cell; ++j) {
-                        test_pair(ids[i], nids[j], "PAIR");
+                for (auto it = ids.begin(); it != ids.end(); ++it) {
+                    for (auto jt = nids.begin(); jt != nids.end(); ++jt) {
+                        test_pair(*it, *jt, "PAIR");
                     }
                 }
             }
         }
     }
 
+    if (stats) {
+        stats->build_seconds = std::chrono::duration<double>(t_built - t_build).count();
+        stats->sweep_seconds = std::chrono::duration<double>(Clock::now() - t_sweep).count();
+        // memory_bytes() and live_blocks() walk the M*M cells, which is not work
+        // the algorithm does: on CellGrid that is two passes over the whole cell
+        // array, on LinkedCellGrid it is O(1), so leaving them in would tax one
+        // structure and not the other. They ride along with the pair counter, on
+        // the extra pass nobody times.
+        if constexpr (Count) {
+            stats->grid_bytes = grid.memory_bytes();
+            stats->grid_live_blocks = grid.live_blocks();
+            stats->pair_tests = pair_tests;
+        }
+    }
+
     return neighbors;
 }
 
-NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, double rc, int M, bool periodic,
-                            std::ostream *trace)
+// Shared by the two entry points, which differ only in the Grid argument.
+template <class Grid>
+NeighborLists cim_dispatch(const std::vector<Particle> &particles, double L, double rc, int M,
+                           bool periodic, std::ostream *trace, CimStats *stats)
 {
     if (periodic && M < 3) {
         if (trace) {
@@ -155,6 +188,42 @@ NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, do
         }
         return brute_force_neighbors(particles, L, rc, periodic);
     }
-    return trace ? cim_sweep<true>(particles, L, rc, M, periodic, trace)
-                 : cim_sweep<false>(particles, L, rc, M, periodic, nullptr);
+    return trace ? cim_sweep<Grid, true, false>(particles, L, rc, M, periodic, trace, stats)
+                 : cim_sweep<Grid, false, false>(particles, L, rc, M, periodic, nullptr, stats);
+}
+
+NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, double rc, int M, bool periodic,
+                            std::ostream *trace, CimStats *stats)
+{
+    return cim_dispatch<CellGrid>(particles, L, rc, M, periodic, trace, stats);
+}
+
+NeighborLists cim_linked_neighbors(const std::vector<Particle> &particles, double L, double rc, int M,
+                                   bool periodic, std::ostream *trace, CimStats *stats)
+{
+    return cim_dispatch<LinkedCellGrid>(particles, L, rc, M, periodic, trace, stats);
+}
+
+CimStats cim_untimed_stats(const std::vector<Particle> &particles, double L, double rc, int M,
+                           bool periodic, bool linked)
+{
+    CimStats stats;
+
+    // With this grid cim_dispatch falls back to brute force, which measures
+    // every pair and builds no grid.
+    if (periodic && M < 3) {
+        stats.pair_tests = brute_pair_tests(particles.size());
+        return stats;
+    }
+
+    if (linked) {
+        cim_sweep<LinkedCellGrid, false, true>(particles, L, rc, M, periodic, nullptr, &stats);
+    } else {
+        cim_sweep<CellGrid, false, true>(particles, L, rc, M, periodic, nullptr, &stats);
+    }
+    // This pass was not timed, so its clock readings mean nothing; the caller
+    // takes the times from the runs that were.
+    stats.build_seconds = 0.0;
+    stats.sweep_seconds = 0.0;
+    return stats;
 }

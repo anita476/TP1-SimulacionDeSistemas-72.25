@@ -80,23 +80,40 @@ def build_frames(trace, stride, max_frames):
     Each frame carries what has been *settled* so far as well as what is happening
     now, so the picture answers "how much is left?" and not only "where am I?":
 
-        done    cells already retired as focus -- their pairs will never be
-                revisited, which is the half-shell guarantee made visible
+        done    cells with no test left, as focus *or* as half-shell partner
         missed  pairs tested and rejected, kept faint
         found   pairs tested and accepted
+
 
     Every FOCUS and SHELL gets its own frame so the cell sweep stays legible;
     pair tests are subsampled by `stride`, since a dense run has thousands.
     """
-    frames, focus, shell = [], None, None
-    done, found, missed = [], [], []
-    n_focus = sum(1 for kind, _ in trace.events if kind == "FOCUS")
+    # A cell stays alive for the pair tests that follow its FOCUS/SHELL line, not
+    # just for the line itself, so the window is carried over the events in between.
+    last_touch, cur_focus, cur_shell = {}, None, None
     for i, (kind, payload) in enumerate(trace.events):
         if kind == "FOCUS":
-            # The previous focus is finished the moment a new one opens.
-            if focus is not None:
-                done.append(focus)
+            cur_focus, cur_shell = payload, None
+        elif kind == "SHELL":
+            cur_shell = payload
+        for c in (cur_focus, cur_shell):
+            if c is not None:
+                last_touch[c] = i
+    # Retired in the order the sweep abandons them, so a frame only has to walk
+    # the pointer forward instead of rescanning the grid.
+    retiring = sorted(last_touch.items(), key=lambda kv: kv[1])
+
+    frames, focus, shell = [], None, None
+    done, found, missed = [], [], []
+    seen, retired = 0, 0
+    n_focus = sum(1 for kind, _ in trace.events if kind == "FOCUS")
+    for i, (kind, payload) in enumerate(trace.events):
+        while retired < len(retiring) and retiring[retired][1] < i:
+            done.append(retiring[retired][0])
+            retired += 1
+        if kind == "FOCUS":
             focus, shell = payload, None
+            seen += 1
         elif kind == "SHELL":
             shell = payload
         else:
@@ -104,10 +121,10 @@ def build_frames(trace, stride, max_frames):
             (found if hit else missed).append((a, b))
             if i % stride:
                 continue
-            frames.append((focus, shell, (a, b, hit), list(done), list(found), list(missed)))
+            frames.append((focus, shell, (a, b, hit), list(done), list(found), list(missed), seen))
             continue
-        frames.append((focus, shell, None, list(done), list(found), list(missed)))
-    frames.append((None, None, None, done + ([focus] if focus else []), found, missed))
+        frames.append((focus, shell, None, list(done), list(found), list(missed), seen))
+    frames.append((None, None, None, [c for c, _ in retiring], found, missed, seen))
     if len(frames) > max_frames:
         keep = len(frames) / max_frames
         frames = [frames[int(k * keep)] for k in range(max_frames)]
@@ -145,7 +162,7 @@ def render(trace, frames, n_focus, out, fps):
     for x, y, r in trace.particles.values():
         ax.add_patch(Circle((x, y), r, fc=PARTICLE_COLOR, ec="#909090", lw=0.5, zorder=3))
 
-    # One reusable patch per cell for the "already retired as focus" layer. Cheaper
+    # One reusable patch per cell for the "no test left here" layer. Cheaper
     # than rebuilding patches each frame, and it is the layer that answers
     # "what is left to do?".
     done_patches = {}
@@ -171,7 +188,7 @@ def render(trace, frames, n_focus, out, fps):
     title = ax.set_title("", fontsize=11, family="monospace")
 
     legend = [
-        Rectangle((0, 0), 1, 1, fc=DONE_COLOR, label="cell done"),
+        Rectangle((0, 0), 1, 1, fc=DONE_COLOR, label="cell retired"),
         Rectangle((0, 0), 1, 1, fc=FOCUS_COLOR, alpha=0.55, label="focus"),
         Rectangle((0, 0), 1, 1, fc=SHELL_COLOR, alpha=0.55, label="half-shell"),
     ]
@@ -179,7 +196,7 @@ def render(trace, frames, n_focus, out, fps):
               ncol=3, frameon=False, fontsize=9)
 
     def draw(idx):
-        focus, shell, test, done, found, missed = frames[idx]
+        focus, shell, test, done, found, missed, seen = frames[idx]
 
         done_set = set(done)
         for cellpos, patch in done_patches.items():
@@ -206,10 +223,9 @@ def render(trace, frames, n_focus, out, fps):
             kind = "self " if shell is None else "shell"
             label = f"{kind}  {a:>3} - {b:<3}  {'NEIGHBOUR' if hit else 'too far'}"
 
-        cells_done = len(done_set) + (1 if focus is not None else 0)
         title.set_text(
             f"M={M}  rc={trace.rc}   {label}\n"
-            f"cells {cells_done}/{n_focus}    "
+            f"cells {seen}/{n_focus}    "
             f"tested {len(found) + len(missed)}    found {len(found)}")
         return focus_patch, shell_patch, found_lines, missed_lines, test_line, title
 
