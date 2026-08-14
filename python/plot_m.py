@@ -5,6 +5,11 @@ One curve per value of N. Each point is the mean of the repeated searches and
 the bar is their sample standard deviation. Also prints the M that minimises the
 time, which is the input point 4 needs.
 
+A second figure plots the number of distance checks against M. The count is
+deterministic for a given configuration and M, so that curve has no noise: it
+shows the pure algorithmic cost, and where it separates from the time curve the
+difference is grid overhead, not distance work.
+
     python3 python/plot_m.py --csv data/bench_p3.csv
 """
 
@@ -25,6 +30,7 @@ def main():
     p = argparse.ArgumentParser(description="Tiempo en funcion de M (punto 3)")
     p.add_argument("--csv", default="data/bench_p3.csv")
     p.add_argument("--out", default="images/tiempo_vs_M.png")
+    p.add_argument("--out-checks", default="images/chequeos_vs_M.png")
     p.add_argument("--show", action="store_true")
     args = p.parse_args()
 
@@ -96,6 +102,46 @@ def main():
     fig.savefig(args.out, dpi=150)
     print(f"figura guardada en {args.out}")
 
+    # Same curves counted instead of timed. The count is deterministic, so there
+    # are no error bars and the minimum needs no plateau argument.
+    checks = aggregate(rows, lambda r: (r["N"], r["M"]), field="checks")
+    check_minima = {}
+    if checks:
+        fig2, ax2 = plt.subplots(figsize=(8, 5.5))
+        for idx, N in enumerate(ns):
+            points = sorted((m, checks[(N, m)][0]) for (n, m) in checks if n == N)
+            ms = [pt[0] for pt in points]
+            counts = [pt[1] for pt in points]
+            ax2.plot(ms, counts, marker=MARKERS[idx % len(MARKERS)],
+                     color=COLORS[idx % len(COLORS)], markersize=5,
+                     linewidth=1.4, label=f"N={N}")
+
+            best_m, best = min(points, key=lambda pt: pt[1])
+            check_minima[N] = (best_m, best)
+            ax2.annotate(f"M={best_m}", (best_m, best),
+                         textcoords="offset points", xytext=(0, -16),
+                         color=COLORS[idx % len(COLORS)], ha="center", fontsize=9)
+
+        ax2.set_yscale("log")
+        # The minimum sits at the corner of the data range, so without margin its
+        # annotation is clipped by the axes.
+        ax2.margins(y=0.15)
+        if spans_orders([m for _, m in checks]):
+            ax2.set_xscale("log")
+        ax2.set_xlabel("M (celdas por lado)")
+        ax2.set_ylabel("distancias evaluadas por búsqueda")
+        ax2.set_title(f"Distancias evaluadas en función de M\n"
+                      f"L={sample['L']:g}, rc={sample['rc']:g}, {boundary} "
+                      f"(conteo exacto, sin ruido de medición)")
+        ax2.grid(True, which="both", alpha=0.3)
+        ax2.legend()
+        fig2.tight_layout()
+        fig2.savefig(args.out_checks, dpi=150)
+        print(f"figura guardada en {args.out_checks}")
+    else:
+        print(f"aviso: {args.csv} no tiene la columna checks; "
+              f"regenera el CSV con benchmark.py para el grafico de chequeos")
+
     print("\nM optimo por N:")
     for N, (best_m, choice, plateau, mean, sem, sweeps, reps) in sorted(optima.items()):
         worst = max(stats[(N, m)][0] for (n, m) in stats if n == N)
@@ -115,6 +161,15 @@ def main():
         else:
             print(f"{'':<9} minimo neto, sin empate a 2 sigma "
                   f"({sweeps} vueltas x {reps // sweeps} busquedas)")
+
+    if check_minima:
+        print("\nM que minimiza las distancias evaluadas (conteo exacto):")
+        for N, (best_m, best) in sorted(check_minima.items()):
+            worst = max(v for (n, m), (v, _, _) in checks.items() if n == N)
+            note = "" if best_m == optima[N][1] else \
+                f"  (el tiempo elige M={optima[N][1]}: la diferencia es overhead de la grilla)"
+            print(f"  N={N:<6} M={best_m:<3} {best:.0f} chequeos, "
+                  f"{worst / best:.1f}x menos que el peor M{note}")
 
     # Recommend the largest M that is inside every N's plateau: on the plateau
     # they cost the same, and the criterion caps M anyway.

@@ -169,16 +169,23 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // The number of distance tests is deterministic for a given configuration,
+        // method and M, so it is counted once in an untimed pass that doubles as a
+        // warm-up for the timed loop below.
+        std::size_t checks = 0;
+        NeighborLists neighbors = method == "cim"
+            ? cim_neighbors(particles, L, rc, M, periodic, trace, &checks)
+            : brute_force_neighbors(particles, L, rc, periodic, &checks);
+
         // The search is run repeat times and every run is timed on its own.
         // Only the search is inside the clock.
-        NeighborLists neighbors;
         std::vector<double> times;
         times.reserve(static_cast<std::size_t>(repeat));
 
         for (int run = 0; run < repeat; ++run) {
             const auto t0 = std::chrono::steady_clock::now();
             neighbors = method == "cim"
-                ? cim_neighbors(particles, L, rc, M, periodic, trace)
+                ? cim_neighbors(particles, L, rc, M, periodic, nullptr)
                 : brute_force_neighbors(particles, L, rc, periodic);
             times.push_back(std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - t0).count());
@@ -193,7 +200,7 @@ int main(int argc, char* argv[]) {
         if (!csv_path.empty()) {
             append_timings(csv_path, program.get<std::string>("--tag"), method,
                            static_cast<int>(particles.size()), L, M, rc, periodic,
-                           program.get<std::string>("--seed"), times);
+                           program.get<std::string>("--seed"), times, checks);
         }
 
         double mean = 0.0;
@@ -202,6 +209,7 @@ int main(int argc, char* argv[]) {
 
         std::cerr << method << ": rc=" << rc << " | " << mean << " s"
                   << (repeat > 1 ? " (mean of " + std::to_string(repeat) + ")" : "") << " | "
+                  << checks << " distance checks | "
                   << pairs / 2 << " pairs | "
                   << static_cast<double>(pairs) / std::max<std::size_t>(neighbors.size(), 1)
                   << " neighbours/particle\n";

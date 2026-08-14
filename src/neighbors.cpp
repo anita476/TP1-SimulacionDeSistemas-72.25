@@ -26,7 +26,8 @@ double max_radius(const std::vector<Particle> &particles)
 }
 
 NeighborLists brute_force_neighbors(const std::vector<Particle> &particles,
-                                    double L, double rc, bool periodic)
+                                    double L, double rc, bool periodic,
+                                    std::size_t* checks)
 {
     const int n = static_cast<int>(particles.size());
     NeighborLists neighbors(n);
@@ -43,6 +44,8 @@ NeighborLists brute_force_neighbors(const std::vector<Particle> &particles,
             }
         }
     }
+    if (checks)
+        *checks = static_cast<std::size_t>(n) * (n - 1) / 2;
     return neighbors;
 }
 
@@ -60,8 +63,9 @@ constexpr int kHalfShell[kHalfShellCount][2] = {{+1, -1}, {+1, 0}, {+1, +1}, {0,
 
 template <bool Trace>
 NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double rc, int M,
-                        bool periodic, std::ostream *trace)
+                        bool periodic, std::ostream *trace, std::size_t *checks)
 {
+    std::size_t tested = 0;
     const int n = static_cast<int>(particles.size());
     NeighborLists neighbors(n);
     CellGrid grid(L, M);
@@ -90,6 +94,7 @@ NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double
     }
 
     auto test_pair = [&](int a, int b, [[maybe_unused]] const char *tag) {
+        ++tested;
         const bool hit = within_cutoff(particles[a], particles[b], rc, L, periodic);
         if (hit) {
             neighbors[a].push_back(b);
@@ -142,19 +147,21 @@ NeighborLists cim_sweep(const std::vector<Particle> &particles, double L, double
         }
     }
 
+    if (checks)
+        *checks = tested;
     return neighbors;
 }
 
 NeighborLists cim_neighbors(const std::vector<Particle> &particles, double L, double rc, int M, bool periodic,
-                            std::ostream *trace)
+                            std::ostream *trace, std::size_t *checks)
 {
     if (periodic && M < 3) {
         if (trace) {
             std::cerr << "warning: periodic with M=" << M
                       << " degenerates to all pairs, so no sweep trace is written\n";
         }
-        return brute_force_neighbors(particles, L, rc, periodic);
+        return brute_force_neighbors(particles, L, rc, periodic, checks);
     }
-    return trace ? cim_sweep<true>(particles, L, rc, M, periodic, trace)
-                 : cim_sweep<false>(particles, L, rc, M, periodic, nullptr);
+    return trace ? cim_sweep<true>(particles, L, rc, M, periodic, trace, checks)
+                 : cim_sweep<false>(particles, L, rc, M, periodic, nullptr, checks);
 }

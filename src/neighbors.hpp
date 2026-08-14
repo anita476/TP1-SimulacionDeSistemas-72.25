@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <iosfwd>
 #include <vector>
 
@@ -17,11 +18,15 @@ int cim_max_grid_side(double L, double rc, double r_max);
 double max_radius(const std::vector<Particle>& particles);
 
 // Measures every pair: N*(N-1)/2 distance tests.
-NeighborLists brute_force_neighbors(const std::vector<Particle>& particles, double L, double rc, bool periodic);
+//
+// When `checks` is non-null it receives the number of distance tests performed.
+NeighborLists brute_force_neighbors(const std::vector<Particle>& particles, double L, double rc, bool periodic,
+                                    std::size_t* checks = nullptr);
 
 // Cell Index Method: MxM grid, own cell + half-shell (L-shape for symmetry) of neighbors
 //
 // When `trace` is non-null every decision the sweep makes is written to it in the
 // grammar python/animate_cim.py replays. Leave it null for timing runs.
+// When `checks` is non-null it receives the number of distance tests performed.
 NeighborLists cim_neighbors(const std::vector<Particle>& particles, double L, double rc, int M, bool periodic,
-                            std::ostream* trace = nullptr);
+                            std::ostream* trace = nullptr, std::size_t* checks = nullptr);
