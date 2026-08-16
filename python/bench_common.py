@@ -22,17 +22,25 @@ def load(path):
                 "periodic": row["periodic"] == "1",
                 "run": int(row["run"]),
                 "seconds": float(row["seconds"]),
+                # Distance tests per search; CSVs written before the column
+                # existed load as None.
+                "checks": int(row["checks"]) if row.get("checks") else None,
             })
     if not rows:
         raise ValueError(f"{path}: no rows")
     return rows
 
 
-def aggregate(rows, key):
-    """Groups seconds by key(row) and returns {key: (mean, sample stddev, n)}."""
+def aggregate(rows, key, field="seconds"):
+    """Groups `field` by key(row) and returns {key: (mean, sample stddev, n)}.
+
+    Rows where the field is missing (None) are skipped, so old CSVs without the
+    checks column still aggregate their seconds.
+    """
     buckets = defaultdict(list)
     for row in rows:
-        buckets[key(row)].append(row["seconds"])
+        if row[field] is not None:
+            buckets[key(row)].append(row[field])
 
     out = {}
     for k, values in buckets.items():
@@ -47,7 +55,7 @@ def aggregate(rows, key):
     return out
 
 
-def sweep_error(rows, key):
+def sweep_error(rows, key, field="seconds"):
     """Uncertainty of each group's mean, estimated from the scatter between sweeps.
 
     The searches inside one sweep share the machine's state, so they are not
@@ -62,13 +70,15 @@ def sweep_error(rows, key):
         k = key(row)
         if row["run"] == 0:
             buckets[k].append([])
-        if buckets[k]:
-            buckets[k][-1].append(row["seconds"])
+        if buckets[k] and row[field] is not None:
+            buckets[k][-1].append(row[field])
 
     out = {}
     for k, sweeps in buckets.items():
         means = [sum(s) / len(s) for s in sweeps if s]
         n = len(means)
+        if n == 0:
+            continue  # the field is absent from this CSV (e.g. checks in an old one)
         mean = sum(means) / n
         if n > 1:
             var = sum((m - mean) ** 2 for m in means) / (n - 1)

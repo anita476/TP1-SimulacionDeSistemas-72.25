@@ -5,6 +5,11 @@ One curve per value of N. Each point is the mean of the repeated searches and
 the bar is their sample standard deviation. Also prints the M that minimises the
 time, which is the input point 4 needs.
 
+A second figure plots the number of distance checks against M. The count is
+deterministic for a given configuration and M, so that curve has no noise: it
+shows the pure algorithmic cost, and where it separates from the time curve the
+difference is grid overhead, not distance work.
+
     python3 python/plot_m.py --csv data/bench_p3.csv
 """
 
@@ -24,7 +29,8 @@ MARKERS = ["o", "s", "^", "D"]
 def main():
     p = argparse.ArgumentParser(description="Tiempo en funcion de M (punto 3)")
     p.add_argument("--csv", default="data/bench_p3.csv")
-    p.add_argument("--out", default="figures/tiempo_vs_M.png")
+    p.add_argument("--out", default="images/tiempo_vs_M.png")
+    p.add_argument("--out-checks", default="images/chequeos_vs_M.png")
     p.add_argument("--show", action="store_true")
     args = p.parse_args()
 
@@ -58,22 +64,25 @@ def main():
                     color=COLORS[idx % len(COLORS)], capsize=3, markersize=5,
                     linewidth=1.4, label=f"N={N}")
 
-        # The minimum alone is not a defensible answer: the tail of the curve is
-        # a plateau and which M wins there flips between sweeps. The decision
-        # uses the between-sweep error, not the spread of individual searches,
-        # which would call almost everything a tie.
+        # The argmin alone is not a defensible answer: the tail of the curve is a
+        # plateau and which M wins there flips between sweeps, so the reported
+        # optimum is the largest M that ties with it. The tie uses the
+        # between-sweep error, not the spread of individual searches, which would
+        # call almost everything a tie.
         best_m = min((m for (n, m) in stats if n == N), key=lambda m: sems[(N, m)][0])
         bm, bs, sweeps = sems[(N, best_m)]
         plateau = sorted(m for (n, m) in stats if n == N
                          and abs(sems[(N, m)][0] - bm)
                          <= 2.0 * math.hypot(sems[(N, m)][1], bs))
-        optima[N] = (best_m, plateau, bm, bs, sweeps, reps)
-        ax.annotate(f"M={best_m}", (best_m, stats[(N, best_m)][0]),
+        choice = max(plateau)
+        optima[N] = (best_m, choice, plateau, bm, bs, sweeps, reps)
+        ax.annotate(f"M={choice}", (choice, stats[(N, choice)][0]),
                     textcoords="offset points", xytext=(0, -16),
                     color=COLORS[idx % len(COLORS)], ha="center", fontsize=9)
 
-    if spans_orders(all_times):
-        ax.set_yscale("log")
+    # The M=1 end is the brute force, an order of magnitude above the plateau.
+    ax.set_yscale("log")
+
     if spans_orders([m for _, m in stats]):
         ax.set_xscale("log")
 
@@ -93,23 +102,79 @@ def main():
     fig.savefig(args.out, dpi=150)
     print(f"figura guardada en {args.out}")
 
+    # Same curves counted instead of timed. The count is deterministic, so there
+    # are no error bars and the minimum needs no plateau argument.
+    checks = aggregate(rows, lambda r: (r["N"], r["M"]), field="checks")
+    check_minima = {}
+    if checks:
+        fig2, ax2 = plt.subplots(figsize=(8, 5.5))
+        for idx, N in enumerate(ns):
+            points = sorted((m, checks[(N, m)][0]) for (n, m) in checks if n == N)
+            ms = [pt[0] for pt in points]
+            counts = [pt[1] for pt in points]
+            ax2.plot(ms, counts, marker=MARKERS[idx % len(MARKERS)],
+                     color=COLORS[idx % len(COLORS)], markersize=5,
+                     linewidth=1.4, label=f"N={N}")
+
+            best_m, best = min(points, key=lambda pt: pt[1])
+            check_minima[N] = (best_m, best)
+            ax2.annotate(f"M={best_m}", (best_m, best),
+                         textcoords="offset points", xytext=(0, -16),
+                         color=COLORS[idx % len(COLORS)], ha="center", fontsize=9)
+
+        ax2.set_yscale("log")
+        # The minimum sits at the corner of the data range, so without margin its
+        # annotation is clipped by the axes.
+        ax2.margins(y=0.15)
+        if spans_orders([m for _, m in checks]):
+            ax2.set_xscale("log")
+        ax2.set_xlabel("M (celdas por lado)")
+        ax2.set_ylabel("distancias evaluadas por búsqueda")
+        ax2.set_title(f"Distancias evaluadas en función de M\n"
+                      f"L={sample['L']:g}, rc={sample['rc']:g}, {boundary} "
+                      f"(conteo exacto, sin ruido de medición)")
+        ax2.grid(True, which="both", alpha=0.3)
+        ax2.legend()
+        fig2.tight_layout()
+        fig2.savefig(args.out_checks, dpi=150)
+        print(f"figura guardada en {args.out_checks}")
+    else:
+        print(f"aviso: {args.csv} no tiene la columna checks; "
+              f"regenera el CSV con benchmark.py para el grafico de chequeos")
+
     print("\nM optimo por N:")
-    for N, (M, plateau, mean, sem, sweeps, reps) in sorted(optima.items()):
+    for N, (best_m, choice, plateau, mean, sem, sweeps, reps) in sorted(optima.items()):
         worst = max(stats[(N, m)][0] for (n, m) in stats if n == N)
         error = f" (+-{sem:.1e} entre vueltas)" if sweeps > 1 else ""
-        print(f"  N={N:<6} minimo en M={M:<3} t={mean:.4e} s{error}  "
-              f"{worst / mean:.1f}x mas rapido que el peor M")
+        print(f"  N={N:<6} M={choice:<3} t={stats[(N, choice)][0]:.4e} s{error}  "
+              f"{worst / stats[(N, choice)][0]:.1f}x mas rapido que el peor M")
         if sweeps < 2:
             print(f"{'':<9} una sola vuelta: sin estimacion de error, corre benchmark.py "
                   f"con --rounds > 1")
         elif len(plateau) > 1:
-            print(f"{'':<9} equivalentes al minimo a 2 sigma: M={plateau} "
+            # Saying "el minimo esta en M=12" when 12 and 13 are a coin flip is
+            # what makes this look like a result instead of noise.
+            print(f"{'':<9} meseta a 2 sigma: M={plateau} (el argmin cayo en M={best_m}, "
+                  f"pero no se distingue del resto de la meseta)")
+            print(f"{'':<9} se toma el mayor de la meseta "
                   f"({sweeps} vueltas x {reps // sweeps} busquedas)")
+        else:
+            print(f"{'':<9} minimo neto, sin empate a 2 sigma "
+                  f"({sweeps} vueltas x {reps // sweeps} busquedas)")
+
+    if check_minima:
+        print("\nM que minimiza las distancias evaluadas (conteo exacto):")
+        for N, (best_m, best) in sorted(check_minima.items()):
+            worst = max(v for (n, m), (v, _, _) in checks.items() if n == N)
+            note = "" if best_m == optima[N][1] else \
+                f"  (el tiempo elige M={optima[N][1]}: la diferencia es overhead de la grilla)"
+            print(f"  N={N:<6} M={best_m:<3} {best:.0f} chequeos, "
+                  f"{worst / best:.1f}x menos que el peor M{note}")
 
     # Recommend the largest M that is inside every N's plateau: on the plateau
     # they cost the same, and the criterion caps M anyway.
-    common = set.intersection(*(set(v[1]) for v in optima.values()))
-    choice = max(common) if common else max(v[0] for v in optima.values())
+    common = set.intersection(*(set(v[2]) for v in optima.values()))
+    choice = max(common) if common else max(v[1] for v in optima.values())
     print(f"\n-> usar --M {choice} en el punto 4")
 
     if args.show:

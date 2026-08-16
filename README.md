@@ -39,15 +39,22 @@ no pisar la configuración con paredes, que los pasos 6 a 8 vuelven a usar:
 **5.** Figura del punto 1: una partícula resaltada y sus vecinas:
 
 ```bash
-python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors.txt --out figures/vecinas.png
+python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors.txt --out images/vecinas.png
 ```
+**5.bis** La misma figura con contorno periódico. La partícula 591 cae en una esquina, así
+que sus vecinas quedan repartidas en las **cuatro esquinas** de la caja. Hay que pasarle
+los tres archivos periódicos: si se dejan los defaults, se mezclan posiciones con paredes
+y lista de vecinas periódica.
+
+```bash
+python3 python/visualize.py --static data/static_pbc.txt --dynamic data/dynamic_pbc.txt --neighbors data/neighbors_pbc.txt --particle 591 --rc 1.0 --periodic --out images/vecinas_pbc.png
+```
+
 Puede utilizarse la versión interactiva. Hacer clic para seleccionar una partícula o utilizar **n,p**.
 
 ```bash
- python3 python/visualize.py --particle 30 --rc 1.0 --neighbors data/neighbors_pbc.txt --interactive --periodic
+python3 python/visualize.py --static data/static_pbc.txt --dynamic data/dynamic_pbc.txt --neighbors data/neighbors_pbc.txt --particle 591 --rc 1.0 --periodic --interactive
 ```
-
->`--periodic` sirve para visualizar el caso con condiciones de contorno de mejor manera)
 
 **6.** Correr la fuerza bruta sobre **la misma** configuración, leyéndola de disco:
 
@@ -67,6 +74,15 @@ Puede utilizarse la versión interactiva. Hacer clic para seleccionar una partí
 python3 python/compare_neighbors.py data/nb_brute.txt data/nb_cim.txt
 ```
 
+**8.bis** La validación que pide la cátedra: que **todo** `M > 1` dé exactamente las
+mismas vecinas que la fuerza bruta (`M=1`), partícula por partícula, sin importar el
+orden dentro de cada línea. Barre `M` de 1 al máximo, con paredes y con contorno
+periódico, sobre varias configuraciones. Tiene que terminar en `VALIDACION OK`:
+
+```bash
+python3 python/validate_m.py -N 1000 --seeds 1 2 3
+```
+
 **9.** Comprobar que un `M` mayor al máximo da error (exit code 1):
 
 ```bash
@@ -80,13 +96,27 @@ python3 python/compare_neighbors.py data/nb_brute.txt data/nb_cim.txt
 ```
 
 ```bash
-python3 python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps 6
+python3 python/animate_cim.py --trace data/trace.txt --out images/cim.gif --fps 6 --stride 5
 ```
 
-**11.** Punto 3, barrido de `M` para dos valores de `N`:
+**10.bis** Lo mismo con contorno periódico. Sirve para ver que ahí el half-shell **nunca
+descarta celdas**: las que se salen por un borde reaparecen por el opuesto.
 
 ```bash
-python3 python/benchmark.py --part 3 --repeat 100 --rounds 5
+./build/CIM-TP1 -N 40 -L 20 --rc 2.0 --seed 7 -M 5 --method cim --periodic --trace data/trace_pbc.txt
+```
+
+```bash
+python3 python/animate_cim.py --trace data/trace_pbc.txt --out images/cim_pbc.gif --fps 6 --stride 5
+```
+
+**11.** Punto 3, barrido de `M` para dos valores de `N`. Son 1000 búsquedas por punto,
+repartidas en 20 vueltas del barrido completo: la dispersión **entre vueltas** es lo que
+mide la incerteza real, porque las búsquedas de una misma vuelta comparten el estado de
+la máquina y subestiman el error:
+
+```bash
+python3 python/benchmark.py --part 3 --repeat 50
 ```
 
 **12.** Graficarlo. Imprime el `M` óptimo, que hace falta en el paso siguiente:
@@ -98,7 +128,7 @@ python3 python/plot_m.py
 **13.** Punto 4, barrido de `N` con ese `M` óptimo, en los dos regímenes de densidad:
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 --repeat 100 --rounds 5
+python3 python/benchmark.py --part 4 --M 13 --repeat 50
 ```
 
 **14.** Graficar las dos curvas superpuestas:
@@ -107,8 +137,61 @@ python3 python/benchmark.py --part 4 --M 13 --repeat 100 --rounds 5
 python3 python/plot_n.py
 ```
 
-Al terminar, en `figures/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
-`tiempo_vs_N.png`.
+Al terminar, en `images/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
+`tiempo_vs_N.png`, que son las que se muestran acá abajo.
+
+## Resultados
+
+### Punto 1 — vecinas de una partícula
+
+Todas las partículas a escala real, la elegida en rojo y sus vecinas en azul. El anillo
+punteado está a `r_i + rc` del centro: todo lo que lo toca con su **borde** es vecina.
+
+![Vecinas de la partícula 30](images/vecinas.png)
+
+### Punto 1 — vecinas con contorno periódico
+
+La misma idea sobre el toroide. La partícula 591 está en la esquina superior derecha y
+tiene 15 vecinas, **11 de ellas a través del borde**: aparecen en las otras tres esquinas
+de la caja, porque para el sistema periódico las cuatro esquinas son el mismo lugar.
+
+Los discos claros alrededor de la elegida son las **imágenes mínimas**: dónde cae cada
+vecina cuando se la trae por el camino corto, que es la distancia que realmente se mide.
+
+![Vecinas de la partícula 591 con contorno periódico](images/vecinas_pbc.png)
+
+### El barrido del CIM, paso a paso
+
+Celda foco en amarillo, celdas del half-shell en celeste, y cada par medido en verde si
+cae dentro de `rc` o rojo si no. `N=40`, `L=20`, `rc=2`, `M=5`.
+
+![Animación del barrido del CIM](images/cim.gif)
+
+### El barrido con contorno periódico
+
+Mismos parámetros, pero sobre el toroide. La diferencia se ve en las celdas del borde:
+con paredes el half-shell descarta las vecinas que caen fuera de la grilla, mientras que
+acá **las cuatro se abren siempre**, envolviendo hacia el lado opuesto.
+
+![Animación del barrido del CIM con contorno periódico](images/cim_pbc.gif)
+
+### Punto 3 — tiempo en función de M
+
+`L=20`, `rc=1`, paredes, 1000 búsquedas por punto (20 vueltas × 50). `M=1` es la fuerza
+bruta. El tiempo cae hasta que la curva entra en una meseta; el óptimo es `M=13`, el
+máximo que permite el criterio `L/M ≥ rc + 2·r_max`, y es unas **4x más rápido** que el
+peor `M`.
+
+![Tiempo de búsqueda en función de M](images/tiempo_vs_M.png)
+
+### Punto 4 — tiempo en función de N
+
+Con `M=13`, los dos regímenes superpuestos. A **densidad fija** (`L ∝ √N`) el CIM escala
+lineal, `t ~ N^1.01`, que es la propiedad que lo justifica; a **densidad libre** (`L=20`)
+la densidad crece con `N` y el exponente sube a `t ~ N^1.51`, porque cada celda acumula
+cada vez más partículas.
+
+![Tiempo de búsqueda en función de N](images/tiempo_vs_N.png)
 
 ## Estructura
 
@@ -126,13 +209,14 @@ Al terminar, en `figures/` quedan `vecinas.png`, `cim.gif`, `tiempo_vs_M.png` y
 │   ├── requirements.txt
 │   ├── visualize.py           figura de partículas y vecinas
 │   ├── animate_cim.py         animación paso a paso del barrido del CIM
-│   ├── compare_neighbors.py   valida el CIM contra la fuerza bruta
+│   ├── compare_neighbors.py   compara dos listas de vecinas ya generadas
+│   ├── validate_m.py          barre M de 1 al máximo contra la fuerza bruta
 │   ├── benchmark.py           barridos de M y de N (puntos 3 y 4)
 │   ├── plot_m.py              tiempo en función de M
 │   ├── plot_n.py              tiempo en función de N
 │   └── bench_common.py        carga de los CSV y estadística compartida
 ├── data/                   archivos generados (fuera de git)
-├── figures/                figuras generadas (fuera de git)
+├── images/                 figuras del informe (versionadas)
 └── CMakeLists.txt
 ```
 
@@ -238,11 +322,36 @@ SE (+1, -1)   E (+1, 0)   NE (+1, +1)   N (0, +1)
 Es el *half-shell*, y es exactamente el conjunto que se muestra en clase y en Allen &
 Tildesley p. 152.
 
+**Excepción, `M < 3` con contorno periódico.** Ahí la grilla es tan chica que el
+half-shell se muerde la cola: con `M=2`, los desplazamientos `(+1,+1)` y `(+1,-1)`
+caen en la **misma** celda módulo 2, así que el mismo par se mediría dos veces y
+quedarían vecinas repetidas. Con esa grilla toda celda es vecina de toda celda, o sea
+que el barrido degenera en medir todos los pares igual, de modo que el programa usa
+directamente la fuerza bruta y lo avisa por `stderr`. El resultado es el mismo; lo que
+cambia es que esos dos puntos del punto 3 no miden el CIM.
+
+## Validación contra la fuerza bruta
+
+```bash
+python3 python/validate_m.py -N 1000 --seeds 1 2 3
+```
+
+Genera una configuración, calcula la lista de referencia con `--method brute` y después
+corre el CIM con **cada** `M` de 1 al máximo sobre esos mismos archivos. Para cada `M`
+compara conjunto contra conjunto, así que el orden dentro de cada línea no importa, y
+además verifica que no haya vecinas repetidas, ni auto-vecindad, ni pares asimétricos
+(`j ∈ vecinas(i)` ⟺ `i ∈ vecinas(j)`). Cierra comprobando que `M = m_max + 1` es
+rechazado. Corre paredes y contorno periódico salvo que se pase `--periodic` o
+`--walls`.
+
+`compare_neighbors.py` hace la misma comparación pero entre dos archivos ya generados,
+que es lo que usan los pasos 6 a 8 de arriba.
+
 ## Animar el barrido
 
 ```bash
 ./build/CIM-TP1 -N 40 -L 20 --rc 2.0 --seed 7 -M 5 --method cim --trace data/trace.txt
-python python/animate_cim.py --trace data/trace.txt --out figures/cim.gif --fps 6
+python python/animate_cim.py --trace data/trace.txt --out images/cim.gif --fps 6 --stride 5
 ```
 
 `--trace` escribe una línea por decisión del barrido (celda foco, celda del
@@ -267,53 +376,37 @@ vecinas numeradas desde 1 en lugar de desde 0.
 ## Estudio paramétrico (puntos 3 y 4)
 
 ```bash
-python3 python/benchmark.py --part 3 && python3 python/plot_m.py
+python3 python/benchmark.py --part 3 --repeat 50 && python3 python/plot_m.py
 ```
 
 Barre `M` de 1 hasta el máximo, para dos valores de `N` (uno intermedio y el más
 alto que la geometría admite), cronometrando la búsqueda `--repeat` veces por
-punto. `plot_m.py` grafica promedio ± desvío estándar e imprime el `M` óptimo.
+punto. `plot_m.py` grafica promedio
+con desvío estándar e imprime el `M` óptimo.
 
-`--rounds` repite el **barrido entero**, no la búsqueda dentro de cada punto. Es
-necesario: medir todos los M de corrido en una sola pasada confunde la deriva de
-la máquina (frecuencia de CPU, caché) con el valor de M. Medido, la dispersión
-entre barridos resulta **3 a 7 veces** el error estándar que reporta un solo
-barrido, y con una sola pasada el `M` óptimo se movía entre 12 y 13 de corrida en
-corrida. Con 5 vueltas queda estable en 13.
+El `M` óptimo **no** sale del mínimo pelado: la cola de la curva es una meseta y cuál
+`M` gana ahí cambia de vuelta en vuelta. La decisión usa la dispersión **entre vueltas**
+y se queda con el **mayor `M` que empata con el mínimo a 2 σ**.
 
-Por eso `plot_m.py` decide qué valores de `M` son equivalentes usando la
-dispersión **entre vueltas**, no la de las búsquedas individuales, y además de
-un único óptimo informa el conjunto de `M` indistinguibles a 2 sigma.
+Hacen falta bastantes vueltas para que el resultado sea estable. Con 5 vueltas, `N=535`
+daba una meseta ancha (`M ∈ {9,11,12,13}`) y el argmin caía en `M=12` **por ruido**; con
+20 vueltas la meseta se cierra en `{12,13}` y el mínimo es `M=13`, igual que para
+`N=1071`, que ahí sí es un mínimo neto sin empate. De ahí sale el `--M 13` del punto 4.
+Moraleja: hay que leer la meseta, no el argmin.
 
 ```bash
-python3 python/benchmark.py --part 4 --M 13 && python3 python/plot_n.py
+python3 python/benchmark.py --part 4 --M 13 --repeat 50 && python3 python/plot_n.py
 ```
 
 Barre `N` con ese `M`: **densidad libre** (`L=20` fijo) y **densidad fija**
-(`L ∝ √N`), superpuestas en la misma figura.
+(`L ∝ √N`), superpuestas en la misma figura. En la curva de densidad fija `L` crece,
+y lo que se mantiene es el **tamaño de celda** óptimo (`M_n ≈ M·L_n/L`), no el número
+`M`: dejar `M=13` con `L=58` daría celdas de 4.5 y el barrido dejaría de ser el que se
+optimizó en el punto 3.
 
-Todos los valores de `M` de un mismo `N` se miden sobre **la misma
-configuración**, leída desde disco, así la comparación es pareada y las
-diferencias son del algoritmo y no del muestreo.
+Ambos ejes van en escala logarítmica cuando los datos abarcan dos órdenes de magnitud
+o más, que es el caso de las dos figuras.
 
-## Estado
-
-| Punto del enunciado | Estado |
-|---|---|
-| 1 — generación aleatoria no superpuesta | listo |
-| 1 — figura de partículas y vecinas | listo |
-| 1 — fuerza bruta | listo |
-| 1 — salida de lista de vecinas y tiempo | listo |
-| 1 — leer estático/dinámico como input | listo |
-| 1 — error si `M > L/(rc + 2·r_max)` | listo |
-| 1 — Cell Index Method (paredes y periódico) | listo |
-| 2 — demostración en vivo | animación en `figures/cim.gif` |
-| 3 — tiempo en función de M | listo |
-| 4.1 — tiempo en función de N, `L` fijo | listo |
-| 4.2 — tiempo en función de N, densidad fija | listo |
-
-Falta la infraestructura de medición que piden los puntos 3 y 4: repetir la búsqueda
-varias veces sobre la misma configuración y reportar promedio y desvío estándar.
 
 ## Bibliografía
 

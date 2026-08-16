@@ -100,18 +100,19 @@ void write_dynamic(const std::string& path, const std::vector<Particle>& particl
 
 void append_timings(const std::string& path, const std::string& tag, const std::string& method,
                     int N, double L, int M, double rc, bool periodic, const std::string& seed,
-                    const std::vector<double>& seconds) {
+                    const std::vector<double>& seconds, std::size_t checks) {
     ensure_parent_dir(path);
     const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0;
 
     std::ofstream out(path, std::ios::app);
     if (!out) fail(path, "cannot open for appending");
-    if (fresh) out << "tag,method,N,L,M,rc,periodic,seed,run,seconds\n";
+    if (fresh) out << "tag,method,N,L,M,rc,periodic,seed,run,seconds,checks\n";
 
     out << std::setprecision(12);
     for (std::size_t run = 0; run < seconds.size(); ++run) {
         out << tag << ',' << method << ',' << N << ',' << L << ',' << M << ',' << rc << ','
-            << (periodic ? 1 : 0) << ',' << seed << ',' << run << ',' << seconds[run] << '\n';
+            << (periodic ? 1 : 0) << ',' << seed << ',' << run << ',' << seconds[run] << ','
+            << checks << '\n';
     }
     if (!out) fail(path, "write failed (disk full?)");
 }

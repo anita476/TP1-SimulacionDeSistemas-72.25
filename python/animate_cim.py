@@ -223,7 +223,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--trace", default="data/trace.txt", help="trace written by the simulator")
-    p.add_argument("--out", default="figures/cim.gif", help="output GIF")
+    p.add_argument("--out", default="images/cim.gif", help="output GIF")
     p.add_argument("--stride", type=int, default=1, help="draw every Nth pair test")
     p.add_argument("--max-frames", type=int, default=600, help="cap on total frames")
     p.add_argument("--fps", type=int, default=8)
